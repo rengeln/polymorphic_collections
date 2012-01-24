@@ -26,6 +26,9 @@
     <ClInclude Include="..\..\..\..\polymorphic_collections\aggregator.hpp">
       <Filter>Header Files\polymorphic_collections</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\test_utils.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\enumerator_tests.cpp">

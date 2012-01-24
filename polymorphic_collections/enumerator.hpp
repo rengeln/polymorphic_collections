@@ -16,8 +16,28 @@
 
 namespace polymorphic_collections
 {
-    static const size_t enumerator_internal_storage_size = 32;
+    //
+    //  This controls the size of the internal buffer used to store the adapter object within
+    //  the enumerator. If the adapter is larger than this buffer it will be allocated on
+    //  the heap.   
+    //
+    //  Internally the enumerator consists of a single pointer plus the buffer space. A
+    //  size of 32 - sizeof(ptrdiff_t) ensures that sizeof(enumerator<>) will be 32 for
+    //  both 32 and 64-bit architectures.
+    //
+    static const size_t enumerator_internal_storage_size = 32 - sizeof(ptrdiff_t);
 
+    //
+    //  Polymorphic interface for enumerator adapters.
+    //
+    //  There are two implementations, one specialized for const types and the other for non-const
+    //  types. The second inherits from the first. This allows an enumerator<const T> to contain
+    //  an enumerator_adapter<T> and access it via enumerator_adapter_interface<const T>.
+    //
+    //  This raises the problem of multiple next() and move() implementations varying only by
+    //  return type. This is resolved by having these methods accept another parameter, a dummy
+    //  pointer which is not used but specifies the desired specialization to invoke.
+    //
     template <typename T, typename Enable = void>
     class enumerator_adapter_interface
     {
@@ -54,6 +74,20 @@ namespace polymorphic_collections
         virtual this_type* _move(void* ptr, T*) = 0;
     };
 
+    //
+    //  All adapter implementations must inherit from this class. 
+    //
+    //  Like enumerator_adapter_interface this is specialized for both non-const and const value
+    //  types. It relies on the curiously recurring template pattern in order to dispatch the
+    //  virtual methods of enumerator_adapter_interface to the adapter's actual implementation
+    //  without the overhead of two virtual calls.
+    //
+    //  Parameters:
+    //      [template] T
+    //          The inheriting type. 
+    //      [template] V
+    //          The value type held by the adapter.
+    //
     template <typename T, typename V, typename Enabler = void>
     class enumerator_adapter 
     {
@@ -125,6 +159,15 @@ namespace polymorphic_collections
         }
     };
 
+    //
+    //  Enumerator adapter which encapsulates a range specified by two STL-compatible iterators.
+    //  The iterators must be support forward iterator semantics and be copyable. The first
+    //  iterator is inclusive while the second is exclusive.
+    //
+    //  Instead of instantiating this directly, use the make_enumerator helper function, i.e.:
+    //      std::vector<int> v;
+    //      enumerator<int> e = make_enumerator(v.begin(), v.end);
+    //
     template <typename T>
     class iterator_enumerator_adapter : public enumerator_adapter<iterator_enumerator_adapter<T>, typename std::iterator_traits<T>::value_type>
     {

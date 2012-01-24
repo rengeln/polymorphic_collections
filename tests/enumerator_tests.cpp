@@ -7,6 +7,7 @@
 #include <vector>
 #include <gtest/gtest.h>
 #include "polymorphic_collections/enumerator.hpp"
+#include "test_utils.hpp"
 
 using namespace polymorphic_collections;
 
@@ -98,20 +99,16 @@ boost::optional<int> CountToThree()
     static int x = 0;
     if (x < 3)
     {
-        return boost::optional<int>(++x);
+        return ++x;
     }
     else
     {
-        return boost::optional<int>();
+        return boost::none;
     }
 }
 
 TEST(EnumeratorTests, EnumeratorCanEncapsulateFunctionPointer)
 {
-    //  The following will not work under Visual C++ due to a bug:
-    //      Foo f = CountToThree;
-    //  This is a workaround:
-    //auto fn = CountToThree;
     enumerator<int> e = &CountToThree;
     ASSERT_TRUE(e.is_valid());
     ASSERT_EQ(e.next(), 1);
@@ -123,7 +120,6 @@ TEST(EnumeratorTests, EnumeratorCanEncapsulateFunctionPointer)
 
 }
 
-
 TEST(EnumeratorTests, EnumeratorCanEncapsulateLambda)
 {
     int x = 0;
@@ -131,11 +127,11 @@ TEST(EnumeratorTests, EnumeratorCanEncapsulateLambda)
     {
         if (x < 3)
         {
-            return boost::optional<int>(++x);
+            return ++x;
         }
         else
         {
-            return boost::optional<int>();
+            return boost::none;
         }
     };
     ASSERT_TRUE(e.is_valid());
@@ -147,3 +143,103 @@ TEST(EnumeratorTests, EnumeratorCanEncapsulateLambda)
     ASSERT_FALSE(e.is_valid());
 }
 
+TEST(EnumeratorTests, FunctionalEnumeratorReturningByValueDoesNotAllowModification)
+{
+    std::vector<int> v;
+    v.push_back(0);
+    v.push_back(1);
+    v.push_back(2);
+    auto i = v.begin();
+    enumerator<int> e = [&]() -> boost::optional<int>
+    {
+        if (i != v.end())
+        {
+            return *i++;
+        }
+        else
+        {
+            return boost::none;
+        }
+    };
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(++e.next(), 1);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(++e.next(), 2);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(++e.next(), 3);
+    ASSERT_FALSE(e.is_valid());
+
+    ASSERT_EQ(v[0], 0);
+    ASSERT_EQ(v[1], 1);
+    ASSERT_EQ(v[2], 2);
+}
+
+TEST(EnumeratorTests, FunctionalEnumeratorReturningByReferenceAllowsModification)
+{
+    std::vector<int> v;
+    v.push_back(0);
+    v.push_back(1);
+    v.push_back(2);
+    auto i = v.begin();
+    enumerator<int> e = [&]() -> boost::optional<int&>
+    {
+        if (i != v.end())
+        {
+            return *i++;
+        }
+        else
+        {
+            return boost::none;
+        }
+    };
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(++e.next(), 1);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(++e.next(), 2);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(++e.next(), 3);
+    ASSERT_FALSE(e.is_valid());
+
+    ASSERT_EQ(v[0], 1);
+    ASSERT_EQ(v[1], 2);
+    ASSERT_EQ(v[2], 3);
+}
+
+TEST(EnumeratorTests, EnumeratorCanHandleMoveOnlyTypes)
+{
+    std::vector<MoveOnly> v;
+    v.push_back(MoveOnly(0));
+    v.push_back(MoveOnly(1));
+    v.push_back(MoveOnly(2));
+    enumerator<MoveOnly> e = v;
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next().value, 0);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next().value, 1);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next().value, 2);
+    ASSERT_FALSE(e.is_valid());
+}
+
+TEST(EnumeratorTests, CanMoveObjectsFromEnumerator)
+{
+    std::vector<MoveOnly> v;
+    v.push_back(MoveOnly(0));
+    v.push_back(MoveOnly(1));
+    v.push_back(MoveOnly(2));
+    enumerator<MoveOnly> e = v;
+    ASSERT_TRUE(e.is_valid());
+    MoveOnly a = std::move(e.next());
+    ASSERT_EQ(a.value, 0);
+    ASSERT_TRUE(e.is_valid());
+    MoveOnly b = std::move(e.next());
+    ASSERT_EQ(b.value, 1);
+    ASSERT_TRUE(e.is_valid());
+    MoveOnly c = std::move(e.next());
+    ASSERT_EQ(c.value, 2);
+    ASSERT_FALSE(e.is_valid());
+
+    ASSERT_EQ(v[0].value, -1);
+    ASSERT_EQ(v[1].value, -1);
+    ASSERT_EQ(v[2].value, -1);
+}
