@@ -3,6 +3,7 @@
 // See accompanying LICENSE file for full license information.
 ////////////////////////////////////////////////////////////////////////////////
 
+#include <boost/optional.hpp>
 #include <array>
 #include <vector>
 #include <gtest/gtest.h>
@@ -73,14 +74,6 @@ TEST(EnumeratorTests, EnumeratorAllowsModificationsOfItemsInVector)
     ASSERT_EQ(v[0], 1);
     ASSERT_EQ(v[1], 2);
     ASSERT_EQ(v[2], 3);
-}
-
-TEST(EnumeratorTests, MutableEnumeratorCanBeAssignedToConstEnumerator)
-{
-    std::vector<int> v;
-    v.push_back(0);
-    enumerator<int> e = v;
-    enumerator<const int> f = std::move(v);
 }
 
 TEST(EnumeratorTests, EnumeratorMoveAssignmentInvalidatesSource)
@@ -242,4 +235,65 @@ TEST(EnumeratorTests, CanMoveObjectsFromEnumerator)
     ASSERT_EQ(v[0].value, -1);
     ASSERT_EQ(v[1].value, -1);
     ASSERT_EQ(v[2].value, -1);
+}
+
+TEST(EnumeratorTests, EnumeratorOfConcreteBaseTypeCanEncapsulateCollectionOfDerivedType)
+{
+    struct Foo
+    {
+        int value;
+        Foo(int v) : value(v) { }
+    };
+
+    struct Bar : Foo
+    {
+        Bar(int v) : Foo(v) { }
+    };
+
+    std::vector<Bar> v;
+    v.push_back(Bar(0));
+    v.push_back(Bar(1));
+    v.push_back(Bar(2));
+    enumerator<Foo> e = v;
+
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next().value, 0);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next().value, 1);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next().value, 2);
+    ASSERT_FALSE(e.is_valid());
+}
+
+TEST(EnumeratorTests, EnumeratorOfAbstractBaseTypeCanEncapsulateCollectionOfDerivedType)
+{
+    struct Foo
+    {
+        virtual ~Foo() = 0 { }
+        virtual int value() = 0;
+    };
+
+    struct Bar : Foo
+    {
+        Bar(int v) : _v(v) { }
+        virtual ~Bar() { }
+        virtual int value() { return _v; }
+
+    private:
+        int _v;
+    };
+
+    std::vector<Bar> v;
+    v.push_back(Bar(0));
+    v.push_back(Bar(1));
+    v.push_back(Bar(2));
+    enumerator<Foo> e = v;
+
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next().value(), 0);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next().value(), 1);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next().value(), 2);
+    ASSERT_FALSE(e.is_valid());
 }

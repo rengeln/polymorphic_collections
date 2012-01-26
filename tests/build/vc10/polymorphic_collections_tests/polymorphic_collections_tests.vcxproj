@@ -97,6 +97,7 @@
     <ClInclude Include="..\..\..\..\polymorphic_collections\accessor.hpp" />
     <ClInclude Include="..\..\..\..\polymorphic_collections\accumulator.hpp" />
     <ClInclude Include="..\..\..\..\polymorphic_collections\aggregator.hpp" />
+    <ClInclude Include="..\..\..\..\polymorphic_collections\algorithms.hpp" />
     <ClInclude Include="..\..\..\..\polymorphic_collections\enumerator.hpp" />
     <ClInclude Include="..\..\..\test_utils.hpp" />
   </ItemGroup>

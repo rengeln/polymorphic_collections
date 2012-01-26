@@ -17,165 +17,285 @@
 namespace polymorphic_collections
 {
     //
-    //  This controls the size of the internal buffer used to store the adapter object within
-    //  the enumerator. If the adapter is larger than this buffer it will be allocated on
-    //  the heap.   
-    //
-    //  Internally the enumerator consists of a single pointer plus the buffer space. A
-    //  size of 32 - sizeof(ptrdiff_t) ensures that sizeof(enumerator<>) will be 32 for
-    //  both 32 and 64-bit architectures.
-    //
-    static const size_t enumerator_internal_storage_size = 32 - sizeof(ptrdiff_t);
-
-    //
-    //  Polymorphic interface for enumerator adapters.
-    //
-    //  There are two implementations, one specialized for const types and the other for non-const
-    //  types. The second inherits from the first. This allows an enumerator<const T> to contain
-    //  an enumerator_adapter<T> and access it via enumerator_adapter_interface<const T>.
-    //
-    //  This raises the problem of multiple next() and move() implementations varying only by
-    //  return type. This is resolved by having these methods accept another parameter, a dummy
-    //  pointer which is not used but specifies the desired specialization to invoke.
-    //
-    template <typename T, typename Enable = void>
-    class enumerator_adapter_interface
-    {
-    };
-    
-    template <typename T>
-    class enumerator_adapter_interface<T, typename boost::disable_if<boost::is_const<T>>::type> : public enumerator_adapter_interface<const T>
-    {
-    public:
-        typedef enumerator_adapter_interface<T> this_type;
-        typedef T value_type;
-
-        virtual ~enumerator_adapter_interface() = 0 
-        {
-        };
-
-        virtual value_type& _next(value_type*) = 0;
-        virtual this_type* _move(void* ptr, T*) = 0;
-    };
-
-    template <typename T>
-    class enumerator_adapter_interface<T, typename boost::enable_if<boost::is_const<T>>::type> : public boost::noncopyable
-    {
-    public:
-        typedef enumerator_adapter_interface<T> this_type;
-        typedef T value_type;
-     
-        virtual ~enumerator_adapter_interface() = 0 
-        {
-        };
-
-        virtual bool _is_valid() const = 0;
-        virtual value_type& _next(T*) = 0;
-        virtual this_type* _move(void* ptr, T*) = 0;
-    };
-
-    //
-    //  All adapter implementations must inherit from this class. 
-    //
-    //  Like enumerator_adapter_interface this is specialized for both non-const and const value
-    //  types. It relies on the curiously recurring template pattern in order to dispatch the
-    //  virtual methods of enumerator_adapter_interface to the adapter's actual implementation
-    //  without the overhead of two virtual calls.
+    //  Interface used by the enumerator to manipulate the underlying adapter.
     //
     //  Parameters:
     //      [template] T
-    //          The inheriting type. 
-    //      [template] V
-    //          The value type held by the adapter.
+    //          Value type.
     //
-    template <typename T, typename V, typename Enabler = void>
-    class enumerator_adapter 
-    {
-    };
-
-    template <typename T, typename V>
-    class enumerator_adapter<T, V, typename boost::disable_if<boost::is_const<V>>::type> : public enumerator_adapter_interface<typename V>
+    template <typename T> class enumerator_adapter_interface
     {
     public:
-        typedef enumerator_adapter<T, V> this_type;
-        typedef V value_type;
-        typedef const typename boost::remove_const<value_type>::type const_value_type;
+        typedef T value_type;
+        typedef enumerator_adapter_interface<T> this_type;
 
-        virtual ~enumerator_adapter()
-        {
-        }
-
-        virtual bool _is_valid() const
-        {
-            return static_cast<const T*>(this)->is_valid();
-        }
-
-        virtual enumerator_adapter_interface<value_type>* _move(void* ptr, value_type*)
-        {
-            return static_cast<T*>(this)->move(ptr);
-        }
-
-        virtual enumerator_adapter_interface<const_value_type>* _move(void* ptr, const_value_type*)
-        {
-            return static_cast<T*>(this)->move(ptr);
-        }
-
-        virtual value_type& _next(value_type*)
-        {
-            return static_cast<T*>(this)->next();
-        }
-
-        virtual const_value_type& _next(const_value_type*)
-        {
-            return static_cast<T*>(this)->next();
-        }
+        virtual bool is_valid() const = 0;
+        virtual T& next() = 0;
+        virtual this_type* move(void* ptr) = 0;
     };
 
-    template <typename T, typename V>
-    class enumerator_adapter<T, V, typename boost::enable_if<boost::is_const<T>>::type> : public enumerator_adapter_interface<typename T::value_type>
+    //
+    //  Proxy class which holds the actual adapter and exposes an interface
+    //  potentially for a different value type.
+    //
+    //  This is the mechanism by which you can have the following work:
+    //      vector<int> v;
+    //      enumerator<const int> e = v;
+    //
+    //  The underlying adapter is an iterator_enumerator_adapter<int> held
+    //  by a enumerator_adapter_proxy<int, const int> which implements the
+    //  enumerator_adapter_interface<const int> interface exposed to the
+    //  containing enumerator.
+    //
+    //  Parameters:
+    //      [template] T
+    //          Value type which will be exposed to the parent enumerator.
+    //      [template] A
+    //          Adapter type.
+    //
+    template <typename T, typename A> class enumerator_adapter_proxy : public enumerator_adapter_interface<T>,
+                                                                       public boost::noncopyable
     {
     public:
-        typedef enumerator_adapter<T, V> this_type;
-        typedef typename T::value_type value_type;
-        typedef typename T::value_type const_value_type;
+        typedef T value_type;
+        typedef A adapter_type;
+        typedef enumerator_adapter_proxy<T, A> this_type;
 
-        virtual ~enumerator_adapter()
+        enumerator_adapter_proxy(this_type&& rhs)
+        : m_adapter(std::move(rhs.m_adapter))
         {
         }
 
-        virtual bool _is_valid() const
+        enumerator_adapter_proxy(adapter_type&& adapter)
+        : m_adapter(std::move(adapter))
         {
-            return static_cast<const T*>(this)->is_valid();
         }
 
-        virtual enumerator_adapter_interface<const_value_type>* _move(void* ptr, const_value_type*)
+        virtual value_type& next()
         {
-            return static_cast<T*>(this)->move(ptr);
+            return m_adapter.next();
         }
 
-        virtual const_value_type& _next(const_value_type*)
+        virtual bool is_valid() const
         {
-            return static_cast<T*>(this)->next();
+            return m_adapter.is_valid();
         }
+
+        virtual enumerator_adapter_interface<value_type>* move(void* ptr)
+        {
+            return new(ptr) this_type(std::move(m_adapter));
+        }
+
+    private:
+        A m_adapter;
     };
 
     //
-    //  Enumerator adapter which encapsulates a range specified by two STL-compatible iterators.
-    //  The iterators must be support forward iterator semantics and be copyable. The first
-    //  iterator is inclusive while the second is exclusive.
+    //  Polymorphic interface for linear navigation of a collection.
     //
-    //  Instead of instantiating this directly, use the make_enumerator helper function, i.e.:
-    //      std::vector<int> v;
-    //      enumerator<int> e = make_enumerator(v.begin(), v.end);
+    //  Parameters:
+    //      [template] T
+    //          Value type held by the collection. As the enumerator will expose
+    //          references to the objects in the collection, this should be const
+    //          if the objects are immutable.
     //
     template <typename T>
-    class iterator_enumerator_adapter : public enumerator_adapter<iterator_enumerator_adapter<T>, typename std::iterator_traits<T>::value_type>
+    class enumerator
     {
     public:
-        typedef iterator_enumerator_adapter<T> this_type;
+        typedef T value_type;
+        typedef enumerator<T> this_type;
+
+        //  Size, in bytes, of the internal storage buffer used to store the
+        //  type-erased adapter object, thereby avoiding a heap allocation.
+        static const size_t internal_storage_size = 32 - sizeof(ptrdiff_t);
+
+        enumerator()
+        : m_adapter(nullptr)
+        {
+            
+        }
+
+        template <typename U>
+        enumerator(enumerator_adapter_proxy<T, U>&& adapter)
+        {
+            size_t proxy_size = sizeof(adapter);
+            if (proxy_size <= internal_storage_size)
+            {
+                m_adapter = new (m_storage) enumerator_adapter_proxy<T, U>(std::move(adapter));
+            }
+            else
+            {
+                m_adapter = new enumerator_adapter_proxy<T, U>(std::move(adapter));
+            }
+        }
+
+        enumerator(this_type&& rhs)
+        {
+            if (reinterpret_cast<char*>(rhs.m_adapter) == rhs.m_storage)
+            {
+                m_adapter = rhs.m_adapter->move(m_storage);
+            }
+            else
+            {
+                m_adapter = rhs.m_adapter;
+            }
+            rhs.m_adapter = nullptr;
+        }
+
+        template <typename U>
+        enumerator(U&& param)
+        : m_adapter(nullptr)
+        {
+            *this = make_enumerator_adapter_proxy<T>(std::forward<U>(param));
+        }
+
+        ~enumerator()
+        {
+            dispose();
+        }
+
+        this_type& operator=(this_type&& rhs)
+        {
+            dispose();
+
+            if (reinterpret_cast<char*>(rhs.m_adapter) == rhs.m_storage)
+            {
+                m_adapter = rhs.m_adapter->move(m_storage);
+            }
+            else
+            {
+                m_adapter = rhs.m_adapter;
+            }
+            rhs.m_adapter = nullptr;
+            return *this;
+        }
+
+        template <typename U>
+        this_type& operator=(enumerator_adapter_proxy<T, U>&& adapter)
+        {
+            dispose();
+
+            size_t proxy_size = sizeof(adapter);
+            if (proxy_size <= internal_storage_size)
+            {
+                m_adapter = new (m_storage) enumerator_adapter_proxy<T, U>(std::move(adapter));
+            }
+            else
+            {
+                m_adapter = new enumerator_adapter_proxy<T, U>(std::move(adapter));
+            }
+
+            return *this;
+        }
+
+        template <typename U>
+        this_type& operator=(U&& param)
+        {
+            *this = make_enumerator_adapter_proxy<T>(std::forward<U>(param));
+            return *this;
+        }
+
+        bool is_valid() const
+        {
+            return m_adapter && m_adapter->is_valid();
+        }
+
+        T& next()
+        {
+            if (!m_adapter)
+            {
+                throw std::out_of_range("enumerator::next()");
+            }
+            else
+            {
+                return m_adapter->next();
+            }
+        }
+
+    private:
+        void dispose()
+        {
+            if (m_adapter)
+            {
+                if (reinterpret_cast<char*>(m_adapter) == m_storage)
+                {
+                    m_adapter->~enumerator_adapter_interface<T>();
+                }
+                else
+                {
+                    delete m_adapter;
+                }
+                m_adapter = nullptr;
+            }
+        }
+        enumerator_adapter_interface<T>* m_adapter;
+        char m_storage[internal_storage_size];
+    };
+
+    template <typename T, typename U>
+    inline auto make_enumerator_adapter_proxy(U&& param) -> enumerator_adapter_proxy<T, decltype(make_enumerator_adapter(std::forward<U>(param)))>
+    {
+        return enumerator_adapter_proxy<T, decltype(make_enumerator_adapter(std::forward<U>(param)))>(make_enumerator_adapter(std::forward<U>(param)));
+    }
+
+    namespace detail
+    {
+        //
+        //  Workaround for a limitation in Visual C++ to do
+        //      declspec(foo())::value_type
+        //
+        template <typename T>
+        inline auto get_enumerator_value_type(const T& adapter) -> typename T::value_type
+        {
+        }
+    }
+
+    //
+    //  Makes an explicitly-typed enumerator out of the source object.
+    //
+    //  Example:
+    //      std::vector<int> v;
+    //      auto e = make_typed_enumerator<const int>(v);   // enumerator<const int>
+    //
+    //  Parameters:
+    //      [template] U
+    //          Enumerator type.
+    //      [in] param
+    //          Parameter which will be passed to make_enumerator_adapter().
+    //
+    template <typename U, typename T>
+    inline auto make_typed_enumerator(T&& param) -> enumerator<U>
+    {
+        return enumerator<U>(make_enumerator_adapter_proxy<U>(std::forward<T>(param)));
+    }
+
+    //
+    //  Makes an implicitly-typed enumerator out of the source object.
+    //
+    //  Example:
+    //      std::vector<int> v;
+    //      auto e = make_enumerator(v);        //  enumerator<int>
+    //
+    template <typename T>
+    inline auto make_enumerator(T&& param) -> enumerator<decltype(detail::get_enumerator_value_type(make_enumerator_adapter(std::forward<T>(param))))>
+    {
+        typedef decltype(detail::get_enumerator_value_type(make_enumerator_adapter(std::forward<T>(param)))) value_type;
+        return enumerator<value_type>(make_enumerator_adapter_proxy<value_type>(std::forward<T>(param)));
+    }
+
+    //
+    //  Enumerator adapter based on a range specified by a pair of STL-compatible
+    //  forward iterators.
+    //
+    template <typename T>
+    class iterator_enumerator_adapter
+    {
+    public:
         typedef T iterator_type;
         typedef typename std::iterator_traits<T>::value_type value_type;
-
+        typedef iterator_enumerator_adapter<T> this_type;
+        
         iterator_enumerator_adapter(const iterator_type& begin, const iterator_type& end)
         : m_begin(begin), m_end(end)
         {
@@ -186,15 +306,11 @@ namespace polymorphic_collections
         {
         }
 
-        iterator_enumerator_adapter<T>& operator=(this_type&& rhs)
+        this_type& operator=(this_type&& rhs)
         {
             m_begin = std::move(rhs.m_begin);
             m_end = std::move(rhs.m_end);
             return *this;
-        }
-
-        virtual ~iterator_enumerator_adapter()
-        {
         }
 
         bool is_valid() const
@@ -211,20 +327,131 @@ namespace polymorphic_collections
             return *m_begin++;
         }
 
-        this_type* move(void* ptr)
+    private:
+        T m_begin, m_end;
+    };
+
+    //
+    //  Makes an iterator_enumerator_adapter out of an STL-compatible collection.
+    //
+    template <typename T>
+    inline iterator_enumerator_adapter<typename T::iterator> make_enumerator_adapter(T& collection)
+    {
+        return iterator_enumerator_adapter<typename T::iterator>(collection.begin(), collection.end());
+    }
+
+    template <typename T>
+    inline iterator_enumerator_adapter<typename T::const_iterator> make_enumerator_adapter(const T& collection)
+    {
+        return iterator_enumerator_adapter<typename T::const_iterator>(collection.cbegin(), collection.cend());
+    }
+
+    //
+    //  Enumerator adapter which embeds an STL-compatible collection in the enumerator.
+    //
+    //  This is useful for return values, for example:
+    //
+    //  enumerator<int> foo()
+    //  {
+    //      std::vector<int> v;
+    //      v.push_back(0);
+    //      v.push_back(1);
+    //      v.push_back(2);
+    //      return std::move(v);
+    //  }
+    //
+    //  The std::move is important - without it, an iterator_enumerator_adapter will
+    //  return where the iterators refer to a non-existent object that has been
+    //  automatically destroyed. With the std::move, the vector is moved into the
+    //  resulting enumerator object.
+    //
+    //  Parameters:
+    //      [template] T
+    //          Collection type.
+    //
+    template <typename T>
+    class embedded_enumerator_adapter
+    {
+    public:
+        typedef T collection_type;
+        typedef typename T::iterator iterator_type;
+        typedef typename T::value_type value_type;
+        typedef embedded_enumerator_adapter<T> this_type;
+
+        embedded_enumerator_adapter(T&& collection)
+        : m_collection(new T(std::move(collection))), 
+          m_begin(m_collection->begin()), 
+          m_end(m_collection->end())
         {
-            return new (ptr) this_type(std::move(*this));
+        }
+
+        embedded_enumerator_adapter(this_type&& rhs)
+        : m_collection(std::move(rhs.m_collection)),
+          m_begin(std::move(rhs.m_begin)),
+          m_end(std::move(rhs.m_end))
+        {
+        }
+
+        this_type& operator=(this_type&& rhs)
+        {
+            m_collection = std::move(rhs.m_collection);
+            m_begin = std::move(rhs.m_begin);
+            m_end = std::move(rhs.m_end);
+            return *this;
+        }
+
+        bool is_valid() const
+        {
+            return m_begin != m_end;
+        }
+
+        value_type& next()
+        {
+            if (!is_valid())
+            {
+                throw std::out_of_range("embedded_enumerator_adapter::next()");
+            }
+            return *m_begin++;
         }
 
     private:
+        std::unique_ptr<collection_type> m_collection;
         iterator_type m_begin, m_end;
     };
 
-     template <typename T, typename F>
-    class functional_enumerator_adapter : public enumerator_adapter<functional_enumerator_adapter<T, F>, typename boost::remove_reference<T>::type>
+    template <typename T>
+    inline embedded_enumerator_adapter<T> make_enumerator_adapter(T&& collection,
+                                                                  const typename T::iterator* dummy = nullptr)
+    {
+        // The dummy parameter ensures this will only be instantiated for collection types.
+        return embedded_enumerator_adapter<T>(std::move(collection));
+    }
+
+    //
+    //  Enumerator adapter which encapsulates a functor.
+    //
+    //  The functor's return type must be wrapped in a boost::optional object. When
+    //  the return value is empty, is_valid() will return false.
+    //
+    //  Inside of the boost::optional object can either be a reference type or value
+    //  type. If it is a reference type, then it can be mutated via enumerator::next().
+    //  If it is a value type then a copy will be made and the reference returned by
+    //  enumerator::next() will be to the copy, and any mutations will not affect
+    //  the original object.
+    //
+    //  Parameters:
+    //      [template] F
+    //          Functor type.
+    //      [template] T
+    //          Return value of the functor; this is not deducible automatically,
+    //          however specialization of make_enumerator_adapter for callable
+    //          objects can deduce it via decltype.
+    //
+    template <typename F, typename T>
+    class functional_enumerator_adapter
     {
     public:
-        typedef functional_enumerator_adapter<T, F> this_type;
+        typedef functional_enumerator_adapter<F, T> this_type;
         typedef F function_type;
         typedef T return_type;
         typedef typename boost::remove_reference<T>::type value_type;
@@ -234,26 +461,17 @@ namespace polymorphic_collections
         {
         }
 
-        functional_enumerator_adapter(function_type&& func)
-        : m_func(std::move(func)), m_hungry(true)
-        {
-        }
-
         functional_enumerator_adapter(this_type&& rhs)
         : m_func(std::move(rhs.m_func)), m_next(std::move(rhs.m_next)), m_hungry(std::move(rhs.m_hungry))
         {
-        }    
+        }
 
         this_type& operator=(this_type&& rhs)
         {
             m_func = std::move(rhs.m_func);
-            m_hungry = std::move(rhs.m_hungry);
             m_next = std::move(rhs.m_next);
+            m_hungry = std::move(rhs.m_hungry);
             return *this;
-        }
-
-        virtual ~functional_enumerator_adapter()
-        {
         }
 
         bool is_valid() const
@@ -266,7 +484,7 @@ namespace polymorphic_collections
             return m_next;
         }
 
-        T& next()
+        value_type& next()
         {
             if (!is_valid())
             {
@@ -279,423 +497,16 @@ namespace polymorphic_collections
             }
         }
 
-        this_type* move(void* ptr)
-        {
-            return new (ptr) this_type(std::move(*this));
-        }
-
     private:
-        mutable bool m_hungry;
-        mutable boost::optional<T> m_next;
         function_type m_func;
+        mutable boost::optional<return_type> m_next;
+        mutable bool m_hungry;
     };
-
-    template <typename T>
-    class embedded_enumerator_adapter : public enumerator_adapter<embedded_enumerator_adapter<T>, typename std::iterator_traits<typename T::iterator>::value_type>
-    {
-    public:
-        typedef embedded_enumerator_adapter<T> this_type;
-        typedef T collection_type;
-        typedef typename T::iterator iterator_type;
-        typedef typename std::iterator_traits<iterator_type>::value_type value_type;
-
-        explicit embedded_enumerator_adapter(collection_type&& collection)
-        : m_collection(new collection_type(std::move(collection)))
-        {
-            m_begin = m_collection->begin();
-            m_end = m_collection->end();
-        }
-
-        explicit embedded_enumerator_adapter(this_type&& rhs)
-        {
-            *this = std::move(rhs);
-        }
-
-        this_type& operator=(this_type&& rhs)
-        {
-            m_collection = std::move(rhs.m_collection);
-            m_begin = std::move(rhs.m_begin);
-            m_end = std::move(rhs.m_end);
-            return *this;
-        }
-
-        virtual ~embedded_enumerator_adapter()
-        {
-        }
-
-        bool is_valid() const
-        {
-            return m_begin != m_end;
-        }
-
-        value_type& next()
-        {
-            return *m_begin++;
-        }
-        
-        this_type* move(void* ptr)
-        {
-            return new (ptr) this_type(std::move(*this));
-        }
-
-    private:
-        std::unique_ptr<collection_type> m_collection;
-        iterator_type m_begin, m_end;
-    };
-
-    template <typename T, typename Enabler = void>
-    class enumerator_adapter_proxy
-    {
-    };
-
-    template <typename T>
-    class enumerator_adapter_proxy<T, typename boost::disable_if<boost::is_const<T>>::type> : public boost::noncopyable
-    {
-    public:
-        typedef enumerator_adapter_proxy<T> this_type;
-        typedef T value_type;
-
-        enumerator_adapter_proxy()
-        : m_ptr(nullptr)
-        {
-        }
-
-        explicit enumerator_adapter_proxy(this_type&& rhs)
-        {
-            *this = std::move(rhs);
-        }
-
-        this_type& operator=(this_type&& rhs)
-        {
-            if (reinterpret_cast<char*>(rhs.m_ptr) == rhs.m_storage)
-            {
-                m_ptr = rhs.m_ptr->_move(m_storage, static_cast<T*>(nullptr));
-                rhs.m_ptr->~enumerator_adapter_interface();
-            }
-            else
-            {
-                m_ptr = rhs.m_ptr;
-            }
-            rhs.m_ptr = nullptr;
-            return *this;
-        }
-
-        template <typename Adapter> enumerator_adapter_proxy(Adapter&& adapter)
-        {
-            if (sizeof(Adapter) <= enumerator_internal_storage_size)
-            {
-                m_ptr = adapter._move(m_storage, static_cast<value_type*>(nullptr));
-            }
-            else
-            {
-                m_ptr = new Adapter(std::move(adapter));
-            }
-        }
-
-        ~enumerator_adapter_proxy()
-        {
-            if (m_ptr)
-            {
-                if (reinterpret_cast<char*>(m_ptr) == m_storage)
-                {
-                    m_ptr->~enumerator_adapter_interface();
-                }
-                else
-                {
-                    delete m_ptr;
-                }
-                m_ptr = 0;
-            }
-        }
-
-        bool is_valid() const
-        {
-            return m_ptr && m_ptr->_is_valid();
-        }
-
-        T& next()
-        {
-            if (!m_ptr)
-            {
-                throw std::out_of_range("Enumerator is empty");
-            }
-            return m_ptr->_next(static_cast<T*>(nullptr));
-        }
-
-    private:
-        template <typename T, class Enabler> friend class enumerator_adapter_proxy;
-        enumerator_adapter_interface<value_type>* m_ptr;
-        union
-        {
-            char m_storage[enumerator_internal_storage_size];
-        };
-    };
-
-    template <typename T>
-    class enumerator_adapter_proxy<T, typename boost::enable_if<boost::is_const<T>>::type> : public boost::noncopyable
-    {
-    public:
-        typedef enumerator_adapter_proxy<T> this_type;
-        typedef T value_type;
-        typedef T const_value_type;
-        typedef typename boost::remove_const<value_type>::type mutable_value_type;
-
-        enumerator_adapter_proxy()
-            : m_ptr(nullptr)
-        {
-        }
-
-        explicit enumerator_adapter_proxy(enumerator_adapter_proxy<const_value_type>&& rhs)
-        {
-            *this = std::move(rhs);
-        }
-
-        explicit enumerator_adapter_proxy(enumerator_adapter_proxy<mutable_value_type>&& rhs)
-        {
-            *this = std::move(rhs);
-        }
-
-        enumerator_adapter_proxy<T>& operator=(enumerator_adapter_proxy<const_value_type>&& rhs)
-        {
-            if (reinterpret_cast<char*>(rhs.m_ptr) == rhs.m_storage)
-            {
-                m_ptr = rhs.m_ptr->move_(m_storage, static_cast<const_value_type*>(nullptr));
-                rhs.m_ptr->~enumerator_adapter_interface();
-            }
-            else
-            {
-                m_ptr = rhs.m_ptr;
-            }
-            rhs.m_ptr = nullptr;
-            return *this;
-        }
-
-        enumerator_adapter_proxy<T>& operator=(enumerator_adapter_proxy<mutable_value_type>&& rhs)
-        {
-            if (reinterpret_cast<char*>(rhs.m_ptr) == rhs.m_storage)
-            {
-                m_ptr = rhs.m_ptr->_move(m_storage, static_cast<mutable_value_type*>(nullptr));
-                rhs.m_ptr->~enumerator_adapter_interface();
-            }
-            else
-            {
-                m_ptr = rhs.m_ptr;
-            }
-            rhs.m_ptr = nullptr;
-            return *this;
-        }
-
-        template <typename Adapter> enumerator_adapter_proxy(Adapter&& adapter)
-        {
-            if (sizeof(Adapter) <= enumerator_internal_storage_size)
-            {
-                m_ptr = adapter._move(m_storage, static_cast<T*>(nullptr));
-            }
-            else
-            {
-                m_ptr = new Adapter(std::move(adapter));
-            }
-        }
-
-        ~enumerator_adapter_proxy()
-        {
-            if (m_ptr)
-            {
-                if (reinterpret_cast<char*>(m_ptr) == m_storage)
-                {
-                    m_ptr->~enumerator_adapter_interface();
-                }
-                else
-                {
-                    delete m_ptr;
-                }
-                m_ptr = 0;
-            }
-        }
-
-        bool is_valid() const
-        {
-            return m_ptr && m_ptr->_is_valid();
-        }
-
-        T& next()
-        {
-            if (!m_ptr)
-            {
-                throw std::out_of_range("Enumerator is empty");
-            }
-            return m_ptr->_next(static_cast<T*>(nullptr));
-        }
-
-    private:
-        template <typename T, class Enabler> friend class enumerator_adapter_proxy;
-        enumerator_adapter_interface<value_type>* m_ptr;
-        union
-        {
-            char m_storage[enumerator_internal_storage_size];
-        };
-    };
-
-    template <typename T, typename Enabler = void>
-    class enumerator
-    {
-    };
-
-    template <typename T>
-    class enumerator<T, typename boost::disable_if<boost::is_const<T>>::type> : public boost::noncopyable
-    {
-    public:
-        typedef enumerator<T> this_type;
-        typedef T value_type;
-        typedef const T const_value_type;
-        typedef T mutable_value_type;
-
-        enumerator()
-        {
-        }
-
-        enumerator(this_type&& rhs)
-        : m_adapter(std::move(rhs.m_adapter))
-        {
-        }
-
-        explicit enumerator(enumerator_adapter_proxy<mutable_value_type>&& adapter)
-        : m_adapter(std::move(adapter))
-        {
-        }
-
-        template <typename A> 
-        enumerator(A&& arg)
-        {
-            *this = make_enumerator(std::forward<A>(arg));
-        }
-
-        this_type& operator=(this_type&& rhs)
-        {
-            m_adapter = std::move(rhs.m_adapter);
-            return *this;
-        }
-
-        bool is_valid() const
-        {
-            return m_adapter.is_valid();
-        }
-
-        T& next()
-        {
-            return m_adapter.next();
-        }
-
-    private:
-        template <typename T, typename Enabler> friend class enumerator;
-        enumerator_adapter_proxy<value_type> m_adapter;
-    };
-
-
-    template <typename T>
-    class enumerator<T, typename boost::enable_if<boost::is_const<T>>::type> : public boost::noncopyable
-    {
-    public:
-        typedef enumerator<T> this_type;
-        typedef T value_type;
-        typedef T const_value_type;
-        typedef typename boost::remove_const<value_type>::type mutable_value_type;
-
-        enumerator()
-        {
-        }
-
-        enumerator(enumerator_adapter_proxy<const_value_type>&& adapter)
-        : m_adapter(std::move(adapter))
-        {
-        }
-
-        enumerator(enumerator_adapter_proxy<mutable_value_type>&& adapter)
-        : m_adapter(std::move(adapter))
-        {
-        }
-
-        template <typename A> 
-        enumerator(A&& arg)
-        {
-            *this = make_enumerator(std::forward<A>(arg));
-        }
-
-        enumerator(enumerator<const_value_type>&& rhs)
-        {
-            *this = std::move(rhs);
-        }
-
-        enumerator(enumerator<mutable_value_type>&& rhs)
-        {
-            *this = std::move(rhs);
-        }
-
-        enumerator<value_type>& operator=(enumerator<const_value_type>&& rhs)
-        {
-            m_adapter = std::move(rhs.m_adapter);
-            return *this;
-        }
-
-        enumerator<value_type>& operator=(enumerator<mutable_value_type>&& rhs)
-        {
-            m_adapter = std::move(rhs.m_adapter);
-            return *this;
-        }
-
-        bool is_valid() const
-        {
-            return m_adapter.is_valid();
-        }
-
-        T& next()
-        {
-            return m_adapter.next();
-        }
-
-    private:
-        template <typename T, typename Enabler> friend class enumerator;
-        enumerator_adapter_proxy<value_type> m_adapter;
-    };
-
-    template <typename T>
-    inline enumerator<typename iterator_enumerator_adapter<T>::value_type> make_enumerator(const T& begin, const T& end)
-    {
-        typedef iterator_enumerator_adapter<T> adapter_type;
-        typedef typename adapter_type::value_type value_type;
-        return enumerator<value_type>(enumerator_adapter_proxy<value_type>(adapter_type(begin, end)));
-    }
-
-    template <typename T>
-    inline enumerator<typename std::iterator_traits<typename T::iterator>::value_type> make_enumerator(T& collection)
-    {
-        typedef iterator_enumerator_adapter<typename T::iterator> adapter_type;
-        typedef typename std::iterator_traits<typename T::iterator>::value_type value_type;
-        return enumerator<value_type>(enumerator_adapter_proxy<value_type>(adapter_type(collection.begin(), collection.end())));
-    }
-
-    template <typename T>
-    inline enumerator<typename std::iterator_traits<typename T::const_iterator>::value_type> make_enumerator(const T& collection)
-    {
-        typedef iterator_enumerator_adapter<typename T::const_iterator> adapter_type;
-        typedef typename std::iterator_traits<typename T::const_iterator>::value_type value_type;
-        return enumerator<value_type>(enumerator_adapter_proxy<value_type>(adapter_type(collection.cbegin(), collection.cend())));
-    }  
-
-    template <typename T>
-    inline enumerator<typename std::iterator_traits<typename T::iterator>::value_type> make_enumerator(T&& collection)
-    {
-        typedef embedded_enumerator_adapter<T> adapter_type;
-        typedef typename std::iterator_traits<typename T::iterator>::value_type value_type;
-        return enumerator<value_type>(enumerator_adapter_proxy<value_type>(adapter_type(std::move(collection))));
-    }
 
     namespace detail
     {
-        //
-        //  Workaround for a bug in Visual C++ making it impossible to do this:
+        //  Workaround for a limitation in Visual C++ making it impossible to do this:
         //      decltype(func())::value_type
-        //
         template <typename T>
         auto get_optional_internal_type(boost::optional<T>& t) -> T
         {
@@ -705,21 +516,15 @@ namespace polymorphic_collections
         auto get_optional_internal_type(boost::optional<T&>& t) -> T&
         {
         }
-
-        template <typename T>
-        auto get_optional_internal_naked_type(boost::optional<T>& t) -> typename boost::remove_reference<T>::type
-        {
-        }
     }
 
     template <typename T>
-    inline auto make_enumerator(const T& func) -> enumerator<decltype(detail::get_optional_internal_naked_type(func()))>
+    inline auto make_enumerator_adapter(const T& func, decltype(func())* dummy = nullptr) -> 
+        functional_enumerator_adapter<T, decltype(detail::get_optional_internal_type(func()))>
     {
-        typedef T function_type;
-        //typedef typename decltype(detail::get_optional_internal_type(func())) value_type;     // Causes an error in Visual C++, though it works in the function declaration...
-        typedef functional_enumerator_adapter<decltype(detail::get_optional_internal_type(func())), function_type> adapter_type;
-        typedef adapter_type::value_type value_type;
-        return enumerator<value_type>(enumerator_adapter_proxy<value_type>(adapter_type(func)));
+        //  The dummy parameter prevents this from being instantiated for non-callable types.
+        //  It's ugly, but it works.
+        return functional_enumerator_adapter<T, decltype(detail::get_optional_internal_type(func()))>(func);
     }
 }
 
