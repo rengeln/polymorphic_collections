@@ -29,12 +29,18 @@
     <ClInclude Include="..\..\..\test_utils.hpp">
       <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\polymorphic_collections\algorithms.hpp">
+    <ClInclude Include="..\..\..\..\polymorphic_collections\algorithm.hpp">
+      <Filter>Header Files\polymorphic_collections</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\polymorphic_collections\detail.hpp">
       <Filter>Header Files\polymorphic_collections</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\enumerator_tests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\accumulator_tests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

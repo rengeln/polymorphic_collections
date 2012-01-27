@@ -6,6 +6,8 @@
 #ifndef TEST_UTILS_HPP
 #define TEST_UTILS_HPP
 
+#include <boost/utility.hpp>
+
 class NoCopyOrMove : public boost::noncopyable
 {
 public:

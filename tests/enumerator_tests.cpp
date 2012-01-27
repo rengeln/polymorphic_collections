@@ -3,7 +3,6 @@
 // See accompanying LICENSE file for full license information.
 ////////////////////////////////////////////////////////////////////////////////
 
-#include <boost/optional.hpp>
 #include <array>
 #include <vector>
 #include <gtest/gtest.h>
@@ -11,6 +10,11 @@
 #include "test_utils.hpp"
 
 using namespace polymorphic_collections;
+
+TEST(EnumeratorTests, EnumeratorIs32Bytes)
+{
+    ASSERT_EQ(sizeof(enumerator<int>), 32);
+}
 
 TEST(EnumeratorTests, DefaultConstructedEnumeratorIsNotValid)
 {
@@ -23,6 +27,13 @@ TEST(EnumeratorTests, EnumeratorIsNotValidForEmptyVector)
     std::vector<int> v;
     enumerator<int> e = v;
     ASSERT_FALSE(e.is_valid());
+}
+
+TEST(EnumeratorTests, EnumeratorThrowsOutOfRangeWhenEmpty)
+{
+    enumerator<int> e;
+    ASSERT_FALSE(e.is_valid());
+    ASSERT_THROW(e.next(), std::out_of_range);
 }
 
 TEST(EnumeratorTests, EnumeratorCanEncapsulateVectorOfInts)
@@ -295,5 +306,67 @@ TEST(EnumeratorTests, EnumeratorOfAbstractBaseTypeCanEncapsulateCollectionOfDeri
     ASSERT_EQ(e.next().value(), 1);
     ASSERT_TRUE(e.is_valid());
     ASSERT_EQ(e.next().value(), 2);
+    ASSERT_FALSE(e.is_valid());
+}
+
+TEST(EnumeratorTests, EnumeratorCanEncapsulateArray)
+{
+    int ar[] = {0, 1, 2};
+    enumerator<int> e = ar;
+
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next(), 0);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next(), 1);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next(), 2);
+    ASSERT_FALSE(e.is_valid());
+}
+
+TEST(EnumeratorTests, EnumeratorCanEncapsulateConstArray)
+{
+    const int ar[] = {0, 1, 2};
+    enumerator<const int> e = ar;
+
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next(), 0);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next(), 1);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next(), 2);
+    ASSERT_FALSE(e.is_valid());
+}
+
+TEST(EnumeratorTests, EnumeratorAllowsMutationOfArrayContents)
+{
+    int ar[] = {0, 1, 2};
+    enumerator<int> e = ar;
+
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(++e.next(), 1);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(++e.next(), 2);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(++e.next(), 3);
+    ASSERT_FALSE(e.is_valid());
+
+    ASSERT_EQ(ar[0], 1);
+    ASSERT_EQ(ar[1], 2);
+    ASSERT_EQ(ar[2], 3);
+}
+
+TEST(EnumeratorTests, EnumeratorCanEncapsulatePointerPlusSize)
+{
+    std::unique_ptr<int[]> v(new int[3]);
+    v[0] = 0;
+    v[1] = 1;
+    v[2] = 2;
+    auto e = make_enumerator(v.get(), 3);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next(), 0);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next(), 1);
+    ASSERT_TRUE(e.is_valid());
+    ASSERT_EQ(e.next(), 2);
     ASSERT_FALSE(e.is_valid());
 }
