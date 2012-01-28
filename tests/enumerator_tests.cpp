@@ -11,29 +11,20 @@
 
 using namespace polymorphic_collections;
 
-TEST(EnumeratorTests, EnumeratorIs32Bytes)
+TEST(EnumeratorTests, DefaultConstructedEnumeratorIsEmpty)
 {
-    ASSERT_EQ(sizeof(enumerator<int>), 32);
-}
+    static_assert(detail::has_push_back<std::vector<MoveOnly>>::value, "vector has no push back");
+    static_assert(detail::has_find<std::map<int, int>>::value, "map has no find");
 
-TEST(EnumeratorTests, DefaultConstructedEnumeratorIsNotValid)
-{
     enumerator<int> e;
-    ASSERT_FALSE(e.is_valid());
+    ASSERT_FALSE(e.next());
 }
 
-TEST(EnumeratorTests, EnumeratorIsNotValidForEmptyVector)
+TEST(EnumeratorTests, EnumeratorEncapsulatingEmptyVectorIsEmpty)
 {
     std::vector<int> v;
     enumerator<int> e = v;
-    ASSERT_FALSE(e.is_valid());
-}
-
-TEST(EnumeratorTests, EnumeratorThrowsOutOfRangeWhenEmpty)
-{
-    enumerator<int> e;
-    ASSERT_FALSE(e.is_valid());
-    ASSERT_THROW(e.next(), std::out_of_range);
+    ASSERT_FALSE(e.next());
 }
 
 TEST(EnumeratorTests, EnumeratorCanEncapsulateVectorOfInts)
@@ -44,13 +35,10 @@ TEST(EnumeratorTests, EnumeratorCanEncapsulateVectorOfInts)
     v.push_back(2);
 
     enumerator<int> e = v;
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 0);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 1);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 2);
-    ASSERT_FALSE(e.is_valid());
+    ASSERT_EQ(*e.next(), 0);
+    ASSERT_EQ(*e.next(), 1);
+    ASSERT_EQ(*e.next(), 2);
+    ASSERT_FALSE(e.next());
 }
 
 TEST(EnumeratorTests, EnumeratorCanEncapsulateVectorOfStrings)
@@ -61,13 +49,10 @@ TEST(EnumeratorTests, EnumeratorCanEncapsulateVectorOfStrings)
     v.push_back("three");
 
     enumerator<std::string> e = v;
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_STREQ(e.next().c_str(), "one");
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_STREQ(e.next().c_str(), "two");
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_STREQ(e.next().c_str(), "three");
-    ASSERT_FALSE(e.is_valid());
+    ASSERT_STREQ(e.next()->c_str(), "one");
+    ASSERT_STREQ(e.next()->c_str(), "two");
+    ASSERT_STREQ(e.next()->c_str(), "three");
+    ASSERT_FALSE(e.next());
 }
 
 TEST(EnumeratorTests, EnumeratorAllowsModificationsOfItemsInVector)
@@ -76,15 +61,14 @@ TEST(EnumeratorTests, EnumeratorAllowsModificationsOfItemsInVector)
     v.resize(3, 0);
 
     enumerator<int> e = v;
-    int n = 0;
-    while (e.is_valid())
+    while (auto n = e.next())
     {
-        e.next() = ++n;
+        (*n)++;
     }
 
     ASSERT_EQ(v[0], 1);
-    ASSERT_EQ(v[1], 2);
-    ASSERT_EQ(v[2], 3);
+    ASSERT_EQ(v[1], 1);
+    ASSERT_EQ(v[2], 1);
 }
 
 TEST(EnumeratorTests, EnumeratorMoveAssignmentInvalidatesSource)
@@ -92,10 +76,9 @@ TEST(EnumeratorTests, EnumeratorMoveAssignmentInvalidatesSource)
     std::vector<int> v;
     v.push_back(0);
     enumerator<int> e = v;
-    ASSERT_TRUE(e.is_valid());
     enumerator<int> f = std::move(e);
-    ASSERT_FALSE(e.is_valid());
-    ASSERT_TRUE(f.is_valid());
+    ASSERT_FALSE(e.next());
+    ASSERT_TRUE(f.next());
 }
 
 boost::optional<int> CountToThree()
@@ -114,13 +97,10 @@ boost::optional<int> CountToThree()
 TEST(EnumeratorTests, EnumeratorCanEncapsulateFunctionPointer)
 {
     enumerator<int> e = &CountToThree;
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 1);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 2);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 3);
-    ASSERT_FALSE(e.is_valid());
+    ASSERT_EQ(*e.next(), 1);
+    ASSERT_EQ(*e.next(), 2);
+    ASSERT_EQ(*e.next(), 3);
+    ASSERT_FALSE(e.next());
 
 }
 
@@ -138,13 +118,10 @@ TEST(EnumeratorTests, EnumeratorCanEncapsulateLambda)
             return boost::none;
         }
     };
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 1);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 2);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 3);
-    ASSERT_FALSE(e.is_valid());
+    ASSERT_EQ(*e.next(), 1);
+    ASSERT_EQ(*e.next(), 2);
+    ASSERT_EQ(*e.next(), 3);
+    ASSERT_FALSE(e.next());
 }
 
 TEST(EnumeratorTests, FunctionalEnumeratorReturningByValueDoesNotAllowModification)
@@ -165,13 +142,9 @@ TEST(EnumeratorTests, FunctionalEnumeratorReturningByValueDoesNotAllowModificati
             return boost::none;
         }
     };
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(++e.next(), 1);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(++e.next(), 2);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(++e.next(), 3);
-    ASSERT_FALSE(e.is_valid());
+    ASSERT_EQ(++(*e.next()), 1);
+    ASSERT_EQ(++(*e.next()), 2);
+    ASSERT_EQ(++(*e.next()), 3);
 
     ASSERT_EQ(v[0], 0);
     ASSERT_EQ(v[1], 1);
@@ -196,13 +169,10 @@ TEST(EnumeratorTests, FunctionalEnumeratorReturningByReferenceAllowsModification
             return boost::none;
         }
     };
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(++e.next(), 1);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(++e.next(), 2);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(++e.next(), 3);
-    ASSERT_FALSE(e.is_valid());
+    ASSERT_EQ(++(*e.next()), 1);
+    ASSERT_EQ(++(*e.next()), 2);
+    ASSERT_EQ(++(*e.next()), 3);
+    ASSERT_FALSE(e.next());
 
     ASSERT_EQ(v[0], 1);
     ASSERT_EQ(v[1], 2);
@@ -216,13 +186,10 @@ TEST(EnumeratorTests, EnumeratorCanHandleMoveOnlyTypes)
     v.push_back(MoveOnly(1));
     v.push_back(MoveOnly(2));
     enumerator<MoveOnly> e = v;
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next().value, 0);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next().value, 1);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next().value, 2);
-    ASSERT_FALSE(e.is_valid());
+    ASSERT_EQ(e.next()->value, 0);
+    ASSERT_EQ(e.next()->value, 1);
+    ASSERT_EQ(e.next()->value, 2);
+    ASSERT_FALSE(e.next());
 }
 
 TEST(EnumeratorTests, CanMoveObjectsFromEnumerator)
@@ -232,16 +199,12 @@ TEST(EnumeratorTests, CanMoveObjectsFromEnumerator)
     v.push_back(MoveOnly(1));
     v.push_back(MoveOnly(2));
     enumerator<MoveOnly> e = v;
-    ASSERT_TRUE(e.is_valid());
-    MoveOnly a = std::move(e.next());
+    MoveOnly a = std::move(*e.next());
     ASSERT_EQ(a.value, 0);
-    ASSERT_TRUE(e.is_valid());
-    MoveOnly b = std::move(e.next());
+    MoveOnly b = std::move(*e.next());
     ASSERT_EQ(b.value, 1);
-    ASSERT_TRUE(e.is_valid());
-    MoveOnly c = std::move(e.next());
+    MoveOnly c = std::move(*e.next());
     ASSERT_EQ(c.value, 2);
-    ASSERT_FALSE(e.is_valid());
 
     ASSERT_EQ(v[0].value, -1);
     ASSERT_EQ(v[1].value, -1);
@@ -267,13 +230,9 @@ TEST(EnumeratorTests, EnumeratorOfConcreteBaseTypeCanEncapsulateCollectionOfDeri
     v.push_back(Bar(2));
     enumerator<Foo> e = v;
 
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next().value, 0);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next().value, 1);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next().value, 2);
-    ASSERT_FALSE(e.is_valid());
+    ASSERT_EQ(e.next()->value, 0);
+    ASSERT_EQ(e.next()->value, 1);
+    ASSERT_EQ(e.next()->value, 2);
 }
 
 TEST(EnumeratorTests, EnumeratorOfAbstractBaseTypeCanEncapsulateCollectionOfDerivedType)
@@ -300,13 +259,10 @@ TEST(EnumeratorTests, EnumeratorOfAbstractBaseTypeCanEncapsulateCollectionOfDeri
     v.push_back(Bar(2));
     enumerator<Foo> e = v;
 
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next().value(), 0);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next().value(), 1);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next().value(), 2);
-    ASSERT_FALSE(e.is_valid());
+    ASSERT_EQ(e.next()->value(), 0);
+    ASSERT_EQ(e.next()->value(), 1);
+    ASSERT_EQ(e.next()->value(), 2);
+    ASSERT_FALSE(e.next());
 }
 
 TEST(EnumeratorTests, EnumeratorCanEncapsulateArray)
@@ -314,13 +270,10 @@ TEST(EnumeratorTests, EnumeratorCanEncapsulateArray)
     int ar[] = {0, 1, 2};
     enumerator<int> e = ar;
 
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 0);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 1);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 2);
-    ASSERT_FALSE(e.is_valid());
+    ASSERT_EQ(*e.next(), 0);
+    ASSERT_EQ(*e.next(), 1);
+    ASSERT_EQ(*e.next(), 2);
+    ASSERT_FALSE(e.next());
 }
 
 TEST(EnumeratorTests, EnumeratorCanEncapsulateConstArray)
@@ -328,13 +281,10 @@ TEST(EnumeratorTests, EnumeratorCanEncapsulateConstArray)
     const int ar[] = {0, 1, 2};
     enumerator<const int> e = ar;
 
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 0);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 1);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 2);
-    ASSERT_FALSE(e.is_valid());
+    ASSERT_EQ(*e.next(), 0);
+    ASSERT_EQ(*e.next(), 1);
+    ASSERT_EQ(*e.next(), 2);
+    ASSERT_FALSE(e.next());
 }
 
 TEST(EnumeratorTests, EnumeratorAllowsMutationOfArrayContents)
@@ -342,13 +292,10 @@ TEST(EnumeratorTests, EnumeratorAllowsMutationOfArrayContents)
     int ar[] = {0, 1, 2};
     enumerator<int> e = ar;
 
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(++e.next(), 1);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(++e.next(), 2);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(++e.next(), 3);
-    ASSERT_FALSE(e.is_valid());
+    ASSERT_EQ(++(*e.next()), 1);
+    ASSERT_EQ(++(*e.next()), 2);
+    ASSERT_EQ(++(*e.next()), 3);
+    ASSERT_FALSE(e.next());
 
     ASSERT_EQ(ar[0], 1);
     ASSERT_EQ(ar[1], 2);
@@ -362,11 +309,40 @@ TEST(EnumeratorTests, EnumeratorCanEncapsulatePointerPlusSize)
     v[1] = 1;
     v[2] = 2;
     auto e = make_enumerator(v.get(), 3);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 0);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 1);
-    ASSERT_TRUE(e.is_valid());
-    ASSERT_EQ(e.next(), 2);
-    ASSERT_FALSE(e.is_valid());
+    ASSERT_EQ(*e.next(), 0);
+    ASSERT_EQ(*e.next(), 1);
+    ASSERT_EQ(*e.next(), 2);
+    ASSERT_FALSE(e.next());
+}
+
+TEST(EnumeratorTests, EnumeratorCanSpecifyNoLockPolicy)
+{
+    std::vector<int> v;
+    enumerator<int, no_lock> e = v;
+}
+
+TEST(EnumeratorTests, EnumeratorCanSpecifyAtomicPolicy)
+{
+    std::vector<int> v;
+    enumerator<int, atomic> e = v;
+}
+
+TEST(EnumeratorTests, EnumeratorCanSpecifyAtomicNonBlockingPolicy)
+{
+    std::vector<int> v;
+    enumerator<int, atomic_nonblocking> e = v;
+}
+
+TEST(EnumeratorTests, MakeEnumeratorCanInitializeEnumeratorWithExplicitPolicy)
+{
+    std::vector<int> v;
+    enumerator<int, atomic> e = make_enumerator(v);
+}
+
+TEST(EnumeratorTests, CanMoveEnumeratorsWithDifferentPolicies)
+{
+    std::vector<int> v;
+    enumerator<int, no_lock> e = v;
+    enumerator<int, atomic> f = std::move(e);
+    enumerator<int, atomic_nonblocking> g = std::move(f);
 }

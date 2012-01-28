@@ -12,6 +12,9 @@
     <Filter Include="Header Files\polymorphic_collections">
       <UniqueIdentifier>{01b7bce7-c3e3-404b-9cd3-a5180220eba5}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\polymorphic_collections\detail">
+      <UniqueIdentifier>{85a8af3b-75e9-4a72-840b-fd05cddd4c70}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\..\polymorphic_collections\accessor.hpp">
@@ -32,8 +35,20 @@
     <ClInclude Include="..\..\..\..\polymorphic_collections\algorithm.hpp">
       <Filter>Header Files\polymorphic_collections</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\polymorphic_collections\detail.hpp">
+    <ClInclude Include="..\..\..\..\polymorphic_collections\detail\common.hpp">
+      <Filter>Header Files\polymorphic_collections\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\polymorphic_collections\detail\enumerator.hpp">
+      <Filter>Header Files\polymorphic_collections\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\polymorphic_collections\detail\accumulator.hpp">
+      <Filter>Header Files\polymorphic_collections\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\polymorphic_collections\policy.hpp">
       <Filter>Header Files\polymorphic_collections</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\polymorphic_collections\detail\accessor.hpp">
+      <Filter>Header Files\polymorphic_collections\detail</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -41,6 +56,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\accumulator_tests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\accessor_tests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

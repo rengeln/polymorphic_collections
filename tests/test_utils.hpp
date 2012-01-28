@@ -29,6 +29,11 @@ public:
     {
     }
 
+    MoveOnly()
+    : value(-2)
+    {
+    }
+
     MoveOnly(MoveOnly&& rhs)
     : value(rhs.value)
     {
@@ -39,6 +44,7 @@ public:
     {
         value = rhs.value;
         rhs.value = -1;
+        return *this;
     }
 };
 

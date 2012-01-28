@@ -158,3 +158,9 @@ TEST(AccumulatorTests, AccumulatorCanEncapsulatePointerPlusSize)
     ASSERT_EQ(v[1], 1);
     ASSERT_EQ(v[2], 2);
 }
+
+TEST(AccumulatorTests, AccumulatorCanSpecifyAtomicPolicy)
+{
+    std::vector<int> v;
+    accumulator<int, atomic> a = v;
+}

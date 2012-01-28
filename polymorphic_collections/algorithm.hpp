@@ -6,10 +6,10 @@
 #ifndef POLYMORPHIC_COLLECTIONS_ALGORITHMS_HPP
 #define POLYMORPHIC_COLLECTIONS_ALGORITHMS_HPP
 
+#include "enumerator.hpp"
+
 namespace polymorphic_collections
 {
-    template <typename T> class enumerator;
-
     template <typename T, typename F>
     inline F for_each(enumerator<T>& e, F func)
     {

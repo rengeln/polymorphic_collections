@@ -55,7 +55,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SolutionDir)..\..\..\</AdditionalIncludeDirectories>
-      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -98,11 +98,16 @@
     <ClInclude Include="..\..\..\..\polymorphic_collections\accumulator.hpp" />
     <ClInclude Include="..\..\..\..\polymorphic_collections\aggregator.hpp" />
     <ClInclude Include="..\..\..\..\polymorphic_collections\algorithm.hpp" />
-    <ClInclude Include="..\..\..\..\polymorphic_collections\detail.hpp" />
+    <ClInclude Include="..\..\..\..\polymorphic_collections\detail\accessor.hpp" />
+    <ClInclude Include="..\..\..\..\polymorphic_collections\detail\accumulator.hpp" />
+    <ClInclude Include="..\..\..\..\polymorphic_collections\detail\common.hpp" />
+    <ClInclude Include="..\..\..\..\polymorphic_collections\detail\enumerator.hpp" />
     <ClInclude Include="..\..\..\..\polymorphic_collections\enumerator.hpp" />
+    <ClInclude Include="..\..\..\..\polymorphic_collections\policy.hpp" />
     <ClInclude Include="..\..\..\test_utils.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\accessor_tests.cpp" />
     <ClCompile Include="..\..\..\accumulator_tests.cpp" />
     <ClCompile Include="..\..\..\enumerator_tests.cpp" />
   </ItemGroup>
