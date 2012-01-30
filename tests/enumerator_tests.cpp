@@ -4,6 +4,9 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include <array>
+#include <map>
+#include <set>
+#include <list>
 #include <vector>
 #include <gtest/gtest.h>
 #include "polymorphic_collections/enumerator.hpp"
@@ -13,9 +16,6 @@ using namespace polymorphic_collections;
 
 TEST(EnumeratorTests, DefaultConstructedEnumeratorIsEmpty)
 {
-    static_assert(detail::has_push_back<std::vector<MoveOnly>>::value, "vector has no push back");
-    static_assert(detail::has_find<std::map<int, int>>::value, "map has no find");
-
     enumerator<int> e;
     ASSERT_FALSE(e.next());
 }
@@ -101,7 +101,6 @@ TEST(EnumeratorTests, EnumeratorCanEncapsulateFunctionPointer)
     ASSERT_EQ(*e.next(), 2);
     ASSERT_EQ(*e.next(), 3);
     ASSERT_FALSE(e.next());
-
 }
 
 TEST(EnumeratorTests, EnumeratorCanEncapsulateLambda)
@@ -336,7 +335,7 @@ TEST(EnumeratorTests, EnumeratorCanSpecifyAtomicNonBlockingPolicy)
 TEST(EnumeratorTests, MakeEnumeratorCanInitializeEnumeratorWithExplicitPolicy)
 {
     std::vector<int> v;
-    enumerator<int, atomic> e = make_enumerator(v);
+    enumerator<int, atomic> e = make_enumerator<int>(v);
 }
 
 TEST(EnumeratorTests, CanMoveEnumeratorsWithDifferentPolicies)
@@ -345,4 +344,18 @@ TEST(EnumeratorTests, CanMoveEnumeratorsWithDifferentPolicies)
     enumerator<int, no_lock> e = v;
     enumerator<int, atomic> f = std::move(e);
     enumerator<int, atomic_nonblocking> g = std::move(f);
+}
+
+TEST(EnumeratorTests, EnumeratorCanEmbedContainer)
+{
+    std::vector<int> v;
+    v.push_back(0);
+    v.push_back(1);
+    v.push_back(2);
+    enumerator<int> e = std::move(v);
+    ASSERT_TRUE(v.empty());
+    ASSERT_EQ(*e.next(), 0);
+    ASSERT_EQ(*e.next(), 1);
+    ASSERT_EQ(*e.next(), 2);
+    ASSERT_FALSE(e.next());
 }

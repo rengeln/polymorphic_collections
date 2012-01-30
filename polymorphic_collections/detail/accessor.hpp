@@ -6,7 +6,7 @@
 #ifndef POLYMORPHIC_COLLECTIONS_DETAIL_ACCESSOR_HPP
 #define POLYMORPHIC_COLLECTIONS_DETAIL_ACCESSOR_HPP
 
-#include <boost/optional.hpp>
+#include "common.hpp"
 
 namespace polymorphic_collections
 {
@@ -73,8 +73,7 @@ namespace polymorphic_collections
                 auto& value = m_adapter.get(key);
                 if (value)
                 {
-                    value_type& ref = value->second;
-                    return boost::optional<value_type&>(ref);
+                    return boost::optional<value_type&>(*value);
                 }
                 else
                 {
@@ -91,21 +90,33 @@ namespace polymorphic_collections
             adapter_type m_adapter;
         };
 
+        //  FIXME: Visual C++ has issues with decltype resolving to int if template
+        //  substitution fails instead of giving an error message; typically this
+        //  results in errors much deeper in the template code, which are extremely
+        //  unclear. This workaround, while hacky, makes error messages MUCH cleaner.
+        //  See the commented out code below for the original version.
         template <typename K, typename T, typename U>
-        inline auto make_accessor_adapter_proxy(U&& param) -> accessor_adapter_proxy<K, T, decltype(make_accessor_adapter(std::forward<U>(param)))>
+        struct get_accessor_adapter_type
         {
-            return accessor_adapter_proxy<K, T, decltype(make_accessor_adapter(std::forward<U>(param)))>(make_accessor_adapter(std::forward<U>(param)));
-        }
+            typedef decltype(make_accessor_adapter<K, T>(declval<U>())) type;
+        };
 
-        template <typename T>
-        inline auto get_accessor_key_type(const T&) -> typename T::key_type
+        template <typename K, typename T, typename U>
+        inline auto make_accessor_adapter_proxy(U&& param) 
+            -> accessor_adapter_proxy<K, T, typename get_accessor_adapter_type<K, T, U>::type>
         {
+            return accessor_adapter_proxy<K, T, typename get_accessor_adapter_type<K, T, U>::type>
+                (make_accessor_adapter<K, T>(std::forward<U>(param)));
         }
-
-        template <typename T>
-        inline auto get_accessor_value_type(const T&) -> typename T::value_type
+        
+        /*
+        template <typename K, typename T, typename U>
+        inline auto make_accessor_adapter_proxy(U&& param) -> accessor_adapter_proxy<K, T, decltype(make_accessor_adapter<K, T>(std::forward<U>(param)))>
         {
+            return accessor_adapter_proxy<K, T, decltype(make_accessor_adapter<K, T>(std::forward<U>(param)))>(make_accessor_adapter<K, T>(std::forward<U>(param)));
         }
+        */
+        
 
         //
         //  Accessor adapter for types which support a find() method.
@@ -116,7 +127,7 @@ namespace polymorphic_collections
         public:
             typedef T collection_type;
             typedef typename T::iterator iterator_type;
-            typedef typename T::value_type value_type;
+            typedef typename T::mapped_type value_type;
             typedef typename T::key_type key_type;
             typedef find_accessor_adapter<T> this_type;
 
@@ -135,7 +146,7 @@ namespace polymorphic_collections
                 auto it = m_collection.find(key);
                 if (it != m_collection.end())
                 {
-                    return *it;
+                    return it->second;
                 }
                 return boost::none;
             }
@@ -144,25 +155,26 @@ namespace polymorphic_collections
             collection_type& m_collection;
         };
 
-        template <typename T>
+        template <typename K, typename T, typename C>
         struct supports_find_accessor_adapter
         {
-            static const bool value = has_find<T>::value &&
-                                      has_iterator<T>::value;
+            static const bool value = has_find<C, K>::value;
         };
 
-        template <typename T>
-        inline typename boost::enable_if<supports_find_accessor_adapter<T>, find_accessor_adapter<T>>::type 
-            make_accessor_adapter(T& collection)
+        template <typename K, typename T, typename C>
+        inline auto make_accessor_adapter(C& collection)
+            -> typename boost::enable_if<supports_find_accessor_adapter<K, T, C>,
+                                         find_accessor_adapter<C>>::type
         {
-            return find_accessor_adapter<T>(collection);
+            return find_accessor_adapter<C>(collection);
         }
 
-        template <typename T>
-        inline typename boost::enable_if<supports_find_accessor_adapter<T>, find_accessor_adapter<T>>::type 
-            make_accessor_adapter(const T& collection)
+        template <typename K, typename T, typename C>
+        inline auto make_accessor_adapter(const C& collection)
+            -> typename boost::enable_if<supports_find_accessor_adapter<K, T, C>,
+                                         find_accessor_adapter<const C>>::type
         {
-            return find_accessor_adapter<const T>(collection);
+            return find_accessor_adapter<const C>(collection);
         }
 
         //
@@ -174,7 +186,7 @@ namespace polymorphic_collections
         public:
             typedef T collection_type;
             typedef typename T::iterator iterator_type;
-            typedef typename T::value_type value_type;
+            typedef typename T::mapped_type value_type;
             typedef typename T::key_type key_type;
             typedef embedded_find_accessor_adapter<T> this_type;
 
@@ -193,7 +205,7 @@ namespace polymorphic_collections
                 auto it = m_collection->find(key);
                 if (it != m_collection->end())
                 {
-                    return *it;
+                    return it->second;
                 }
                 return boost::none;
             }
@@ -202,23 +214,73 @@ namespace polymorphic_collections
             std::unique_ptr<collection_type> m_collection;
         };
 
-        template <typename T>
+        template <typename K, typename T, typename C>
         struct supports_embedded_find_accessor_adapter
         {
-            static const bool value = has_find<T>::value &&
-                                      has_iterator<T>::value;
+            static const bool value = has_find<C, K>::value;
         };
         
-        template <typename T>
-        inline typename boost::enable_if<supports_embedded_find_accessor_adapter<T>, embedded_find_accessor_adapter<T>>::type 
-            make_accessor_adapter(T&& collection, typename T::iterator* dummy = nullptr)
+        template <typename K, typename T, typename C>
+        inline auto make_accessor_adapter(C&& collection, typename C::iterator* dummy = nullptr)
+            -> typename boost::enable_if<supports_embedded_find_accessor_adapter<K, T, typename boost::remove_reference<C>::type>,
+                                         embedded_find_accessor_adapter<typename boost::remove_reference<C>::type>>::type
         {
-            // FIXME: won't compile without the dummy parameter, ambiguous vs the T&/const T&
-            // find_accessor_adapter implementations. Somehow, enumerator doesn't have
-            // this issue - must figure out why.
-            return embedded_find_accessor_adapter<T>(std::move(collection));
+            // FIXME: the dummy parameter should not be necessary but Visual C++ chokes if it isn't present.
+            return embedded_find_accessor_adapter<typename boost::remove_reference<C>::type>(std::forward<C>(collection));
         }
+
+        //
+        //  Accessor adapter for a functor.
+        //
+        template <typename F, typename K>
+        class functional_accessor_adapter
+        {
+        public:
+            typedef F function_type;
+            typedef K key_type;
+            typedef typename is_callable_1<F, K>::return_type::value_type return_type;
+            typedef typename boost::remove_reference<return_type>::type value_type;
+            typedef functional_accessor_adapter<F, K> this_type;
+
+            functional_accessor_adapter(const function_type& func)
+            : m_func(func)
+            {
+            }
+            
+            functional_accessor_adapter(function_type&& func)
+            : m_func(std::move(func))
+            {
+            }
+            
+            functional_accessor_adapter(this_type&& rhs)
+            : m_func(std::move(rhs.m_func))
+            {
+            }
+            
+            boost::optional<return_type>& get(const key_type& key)
+            {
+                m_value = m_func(key);
+                return m_value;
+            }
+
+        private:
+            function_type m_func;
+            boost::optional<return_type> m_value;
+        };
         
+        template <typename K, typename T, typename F>
+        struct supports_functional_accessor_adapter
+        {
+            static const bool value = is_callable_1<F, K>::value;
+        };
+
+        template <typename K, typename T, typename F>
+        inline auto make_accessor_adapter(F&& func)
+            -> typename boost::enable_if<supports_functional_accessor_adapter<K, T, typename boost::remove_reference<F>::type>,
+                                         functional_accessor_adapter<typename boost::remove_reference<F>::type, K>>::type
+        {
+            return functional_accessor_adapter<typename boost::remove_reference<F>::type, K>(std::forward<F>(func));
+        }
     }
 }
 

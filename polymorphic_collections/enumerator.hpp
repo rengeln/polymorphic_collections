@@ -15,7 +15,6 @@
 #include <boost/utility.hpp>
 
 #include "policy.hpp"
-#include "detail/common.hpp"
 #include "detail/enumerator.hpp"
 
 namespace polymorphic_collections
@@ -188,24 +187,10 @@ namespace polymorphic_collections
     //      [in] param
     //          Parameter which will be passed to make_enumerator_adapter().
     //
-    template <typename U, typename T>
-    inline auto make_typed_enumerator(T&& param) -> enumerator<U>
+    template <typename T, typename U>
+    inline auto make_enumerator(U&& param) -> enumerator<T>
     {
-        return enumerator<U>(detail::make_enumerator_adapter_proxy<U>(std::forward<T>(param)));
-    }
-
-    //
-    //  Makes an implicitly-typed enumerator out of the source object.
-    //
-    //  Example:
-    //      std::vector<int> v;
-    //      auto e = make_enumerator(v);        (enumerator<int>)
-    //
-    template <typename T>
-    inline auto make_enumerator(T&& param) -> enumerator<decltype(detail::get_enumerator_value_type(detail::make_enumerator_adapter(std::forward<T>(param))))>
-    {
-        typedef decltype(detail::get_enumerator_value_type(detail::make_enumerator_adapter(std::forward<T>(param)))) value_type;
-        return enumerator<value_type>(detail::make_enumerator_adapter_proxy<value_type>(std::forward<T>(param)));
+        return enumerator<T>(detail::make_enumerator_adapter_proxy<T>(std::forward<U>(param)));
     }
 
     //
@@ -219,7 +204,7 @@ namespace polymorphic_collections
     inline enumerator<T> make_enumerator(T* ptr, size_t count)
     {
         return enumerator<T>(detail::enumerator_adapter_proxy<T, detail::iterator_enumerator_adapter<T*>>
-            (detail::make_enumerator_adapter(ptr, ptr + count)));
+            (detail::iterator_enumerator_adapter<T*>(ptr, ptr + count)));
     }
 }
 

@@ -12,7 +12,6 @@
 #include <boost/type_traits.hpp>
 
 #include "policy.hpp"
-#include "detail/common.hpp"
 #include "detail/accumulator.hpp"
 
 namespace polymorphic_collections
@@ -184,19 +183,11 @@ namespace polymorphic_collections
         char m_storage[internal_storage_size];
     };
 
-    template <typename T>
-    inline auto make_accumulator(T&& param) -> accumulator<decltype(detail::get_accumulator_value_type(detail::make_accumulator_adapter(std::forward<T>(param))))>
+    template <typename T, typename U>
+    inline auto make_accumulator(U&& param)
+        -> accumulator<T>
     {
-        typedef decltype(detail::get_accumulator_value_type(detail::make_accumulator_adapter(std::forward<T>(param)))) value_type;
-        return accumulator<value_type>(detail::make_accumulator_adapter_proxy<value_type>(std::forward<T>(param)));
-    }
-
-    template <typename T, typename F>
-    inline accumulator<T> make_accumulator(F&& func, decltype(func(*(T*)0))* dummy = nullptr)
-    {
-        //  Dummy parameter ensures this is specialized only for callables
-        return accumulator<T>(detail::accumulator_adapter_proxy<T, detail::functional_accumulator_adapter<F, T>>
-            (detail::functional_accumulator_adapter<F, T>(std::forward<F>(func))));
+        return accumulator<T>(detail::make_accumulator_adapter_proxy<T>(detail::make_accumulator_adapter<T>(std::forward<U>(param))));
     }
 
     template <typename T>

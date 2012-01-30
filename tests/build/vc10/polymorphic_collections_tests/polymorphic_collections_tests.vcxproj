@@ -100,6 +100,7 @@
     <ClInclude Include="..\..\..\..\polymorphic_collections\algorithm.hpp" />
     <ClInclude Include="..\..\..\..\polymorphic_collections\detail\accessor.hpp" />
     <ClInclude Include="..\..\..\..\polymorphic_collections\detail\accumulator.hpp" />
+    <ClInclude Include="..\..\..\..\polymorphic_collections\detail\aggregator.hpp" />
     <ClInclude Include="..\..\..\..\polymorphic_collections\detail\common.hpp" />
     <ClInclude Include="..\..\..\..\polymorphic_collections\detail\enumerator.hpp" />
     <ClInclude Include="..\..\..\..\polymorphic_collections\enumerator.hpp" />
@@ -109,6 +110,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\..\accessor_tests.cpp" />
     <ClCompile Include="..\..\..\accumulator_tests.cpp" />
+    <ClCompile Include="..\..\..\aggregator_tests.cpp" />
     <ClCompile Include="..\..\..\enumerator_tests.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

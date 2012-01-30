@@ -57,3 +57,27 @@ TEST(AccessorTests, AccessorCanEmbedMapWithMoveOnlyValueType)
     ASSERT_EQ(a[2]->value, 2);
     ASSERT_EQ(a[3]->value, 3);
 }
+
+boost::optional<int> PlusOne(int x)
+{
+    return x + 1;
+}
+
+TEST(AccessorTests, AccessorCanEncapsulateFunctionPointer)
+{
+    accessor<int, int> a = &PlusOne;
+    ASSERT_EQ(*a[0], 1);
+    ASSERT_EQ(*a[1], 2);
+    ASSERT_EQ(*a[2], 3);
+}
+
+TEST(AccessorTests, AccessorCanEncapsulateLambda)
+{
+    accessor<int, int> a = [] (int x) -> boost::optional<int>
+    {
+        return x + 1;
+    };
+    ASSERT_EQ(*a[0], 1);
+    ASSERT_EQ(*a[1], 2);
+    ASSERT_EQ(*a[2], 3);
+}

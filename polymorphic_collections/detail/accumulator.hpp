@@ -6,6 +6,8 @@
 #ifndef POLYMORPHIC_COLLECTIONS_DETAIL_ACCUMULATOR_HPP
 #define POLYMORPHIC_COLLECTIONS_DETAIL_ACCUMULATOR_HPP
 
+#include "common.hpp"
+
 namespace polymorphic_collections
 {
     namespace detail
@@ -57,7 +59,7 @@ namespace polymorphic_collections
 
             virtual void add(value_type&& value)
             {
-                return m_adapter.add(std::move(value));
+                m_adapter.add(std::move(value));
             }
 
             virtual accumulator_adapter_interface<T>* move(void* ptr)
@@ -69,35 +71,47 @@ namespace polymorphic_collections
             adapter_type m_adapter;
         };
 
+        //  FIXME: Visual C++ has issues with decltype resolving to int if template
+        //  substitution fails instead of giving an error message; typically this
+        //  results in errors much deeper in the template code, which are extremely
+        //  unclear. This workaround, while hacky, makes error messages MUCH cleaner.
+        //  See the commented out code below for the original version.
         template <typename T, typename U>
-        inline auto make_accumulator_adapter_proxy(U&& param) -> accumulator_adapter_proxy<T, decltype(make_accumulator_adapter(std::forward<U>(param)))>
+        struct get_accumulator_adapter_type
         {
-            return accumulator_adapter_proxy<T, decltype(make_accumulator_adapter(std::forward<U>(param)))>(make_accumulator_adapter(std::forward<U>(param)));
+            typedef decltype(make_accumulator_adapter<T>(declval<U>())) type;
+        };
+
+        template <typename T, typename U>
+        inline auto make_accumulator_adapter_proxy(U&& param) 
+            -> accumulator_adapter_proxy<T, typename get_accumulator_adapter_type<T, U>::type>
+        {
+            return accumulator_adapter_proxy<T, typename get_accumulator_adapter_type<T, U>::type>
+                (make_accumulator_adapter<T>(std::forward<U>(param)));
         }
 
-        //
-        //  Workaround for a limitation in Visual C++ to do
-        //      declspec(foo())::value_type
-        //
-        template <typename T>
-        inline auto get_accumulator_value_type(const T& adapter) -> typename T::value_type
+        /*
+        template <typename T, typename U>
+        inline auto make_accumulator_adapter_proxy(U&& param) -> accumulator_adapter_proxy<T, decltype(make_accumulator_adapter<T>(std::forward<U>(param)))>
         {
+            return accumulator_adapter_proxy<T, decltype(make_accumulator_adapter<T>(std::forward<U>(param)))>(make_accumulator_adapter<T>(std::forward<U>(param)));
         }
-    
+        */
+
         //
         //  Accumulator adapter encapsulating a collection implementing a push_back method.
         //
         //  Parameters:
-        //      [template] T
+        //      [template] C
         //          Collection type.
         //
-        template <typename T>
+        template <typename C>
         class push_back_accumulator_adapter
         {
         public:
-            typedef T collection_type;
-            typedef typename T::value_type value_type;
-            typedef push_back_accumulator_adapter<T> this_type;
+            typedef C collection_type;
+            typedef typename C::value_type value_type;
+            typedef push_back_accumulator_adapter<C> this_type;
 
             push_back_accumulator_adapter(collection_type& collection)
             : m_collection(collection)
@@ -110,17 +124,31 @@ namespace polymorphic_collections
             }
 
         private:
-            T& m_collection;
+            collection_type& m_collection;
         };
+
+        template <typename T, typename C>
+        struct supports_push_back_accumulator_adapter
+        {
+            static const bool value = has_push_back<C, T>::value;
+        };
+
+        template <typename T, typename C>
+        inline auto make_accumulator_adapter(C&& collection)
+            -> typename boost::enable_if<supports_push_back_accumulator_adapter<T, typename boost::remove_reference<C>::type>,
+                                         push_back_accumulator_adapter<typename boost::remove_reference<C>::type>>::type
+        {
+            return push_back_accumulator_adapter<typename boost::remove_reference<C>::type>(std::forward<C>(collection));
+        }
 
         //
         //  Accumulator adapter encapsulating two output iterators representing a range.
         //
-        template <typename T>
+        template <typename I>
         class iterator_accumulator_adapter
         {
         public:
-            typedef T iterator_type;
+            typedef I iterator_type;
             typedef typename std::iterator_traits<iterator_type>::value_type value_type;
             typedef typename iterator_accumulator_adapter<iterator_type> this_type;
 
@@ -143,15 +171,47 @@ namespace polymorphic_collections
             iterator_type m_begin, m_end;
         };
 
+        template <typename T, typename C>
+        struct supports_iterator_accumulator_adapter
+        {
+            //  If it supports both iterators and push_back, prefer push_back because
+            //  that will allow the container to grow.
+            static const bool value = has_iterator<C>::value &&
+                                      !supports_push_back_accumulator_adapter<T, C>::value;
+        };
+
+        template <typename T, typename C>
+        inline auto make_accumulator_adapter(C& collection)
+            -> typename boost::enable_if<supports_iterator_accumulator_adapter<T, C>,
+                                         iterator_accumulator_adapter<typename C::iterator>>::type
+        {
+            return iterator_accumulator_adapter<typename C::iterator>(collection.begin(), collection.end());
+        }
+
+        template <typename T, typename C>
+        inline auto make_accumulator_adapter(const C& collection)
+            -> typename boost::enable_if<supports_iterator_accumulator_adapter<T, C>,
+                                         iterator_accumulator_adapter<typename C::iterator>>::type
+        {
+            return iterator_accumulator_adapter<typename C::const_iterator>(collection.cbegin(), collection.cend());
+        }
+
+        template <typename T, size_t N>
+        inline auto make_accumulator_adapter(T (&ar)[N])
+            -> iterator_accumulator_adapter<T*>
+        {
+            return iterator_accumulator_adapter<T*>(std::begin(ar), std::end(ar));
+        }
+
         //
         //  Accumulator adapter encapsulating a functor.
         //
-        template <typename F, typename T>
+        template <typename T, typename F>
         class functional_accumulator_adapter
         {
         public:
-            typedef F function_type;
             typedef T value_type;
+            typedef F function_type;
 
             functional_accumulator_adapter(const function_type& func)
             : m_func(func)
@@ -172,81 +232,18 @@ namespace polymorphic_collections
             function_type m_func;
         };
 
-        //  Default matcher
-        template <typename T, typename Enable = void>
-        struct make_accumulator_adapter_impl
+        template <typename T, typename F>
+        struct supports_functional_accumulator_adapter
         {
-            static void exec(T ar)
-            {
-                //  An error here means you're trying to initialize an accumulator
-                //  from a type that doesn't match any of the available adapters.
-            }
+            static const bool value = is_callable_1<F, T>::value;
         };
 
-        //  Matches types with a push_back() method
-        template <typename T>
-        struct make_accumulator_adapter_impl<T, typename boost::enable_if<has_push_back<T>>::type>
+        template <typename T, typename F>
+        inline auto make_accumulator_adapter(F&& func)
+            -> typename boost::enable_if<supports_functional_accumulator_adapter<T, typename boost::remove_reference<F>::type>,
+                                         functional_accumulator_adapter<T, typename boost::remove_reference<F>::type>>::type
         {
-            static push_back_accumulator_adapter<T> exec(T& collection)
-            {
-                return push_back_accumulator_adapter<T>(collection);
-            }
-        };
-
-        //  Matches arrays
-        template <typename T>
-        struct make_accumulator_adapter_impl<T, typename boost::enable_if<boost::is_array<T>>::type>
-        {
-            typedef typename boost::remove_extent<T>::type value_type;
-  
-            template <typename U, size_t N>
-            static iterator_accumulator_adapter<value_type*> exec(U (&ar)[N])
-            {
-                return iterator_accumulator_adapter<value_type*>(std::begin(ar), std::end(ar));
-            }
-        };
-
-        //  Matches types with iterators, but no push_back (i.e. std::array)
-        template <typename T>
-        struct make_accumulator_adapter_impl<T, typename boost::enable_if<boost::mpl::and_<has_iterator<T>, boost::mpl::not_<has_push_back<T>>>>::type>
-        {
-            typedef typename T::iterator iterator_type;
-            typedef typename std::iterator_traits<iterator_type>::value_type value_type;
-
-            static iterator_accumulator_adapter<iterator_type> exec(T& collection)
-            {
-                return iterator_accumulator_adapter<iterator_type>(std::begin(collection), std::end(collection));
-            }
-        };
-
-        //  Matches builtin callable types
-        //  Non-builtin callables can't be matched because there's no way of knowing what the parameter type
-        //  is (since there might be multiple overloads of operator() accepting different parameters.)
-        //  Therefore, to encapsulate a non-builtin callable such as a lambda, use:
-        //
-        //  accumulator<T> = make_accumulator<T>(lamba);
-        //
-        template <typename T>
-        struct make_accumulator_adapter_impl<T, typename boost::enable_if<boost::function_types::is_callable_builtin<T>>::type>
-        {
-            typedef typename boost::mpl::front<boost::function_types::parameter_types<T>>::type parameter_type;
-            typedef typename boost::remove_reference<parameter_type>::type value_type;
-
-            static functional_accumulator_adapter<T, value_type> exec(const T& func)
-            {
-                return functional_accumulator_adapter<T, value_type>(func);
-            }
-
-            static functional_accumulator_adapter<T, value_type> exec(T&& func)
-            {
-                return functional_accumulator_adapter<T, value_type>(std::move(func));
-            }
-        };
-
-        template <typename T>
-        inline auto make_accumulator_adapter(T&& param) -> decltype(make_accumulator_adapter_impl<typename boost::remove_reference<T>::type>::exec(std::forward<T>(param)))
-        {
-            return make_accumulator_adapter_impl<typename boost::remove_reference<T>::type>::exec(std::forward<T>(param));
+            return functional_accumulator_adapter<T, typename boost::remove_reference<F>::type>(std::forward<F>(func));
         }
     }
 }

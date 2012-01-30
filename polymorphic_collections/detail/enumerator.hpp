@@ -6,6 +6,8 @@
 #ifndef POLYMORPHIC_COLLECTIONS_DETAIL_ENUMERATOR_HPP
 #define POLYMORPHIC_COLLECTIONS_DETAIL_ENUMERATOR_HPP
 
+#include "common.hpp"
+
 namespace polymorphic_collections
 {
     namespace detail
@@ -92,20 +94,33 @@ namespace polymorphic_collections
             A m_adapter;
         };
 
+        //  FIXME: Visual C++ has issues with decltype resolving to int if template
+        //  substitution fails instead of giving an error message; typically this
+        //  results in errors much deeper in the template code, which are extremely
+        //  unclear. This workaround, while hacky, makes error messages MUCH cleaner.
+        //  See the commented out code below for the original version.
         template <typename T, typename U>
-        inline auto make_enumerator_adapter_proxy(U&& param) -> enumerator_adapter_proxy<T, decltype(make_enumerator_adapter(std::forward<U>(param)))>
+        struct get_enumerator_adapter_type
         {
-            return enumerator_adapter_proxy<T, decltype(make_enumerator_adapter(std::forward<U>(param)))>(make_enumerator_adapter(std::forward<U>(param)));
+            typedef decltype(make_enumerator_adapter<T>(declval<U>())) type;
+        };
+
+        template <typename T, typename U>
+        inline auto make_enumerator_adapter_proxy(U&& param) 
+            -> enumerator_adapter_proxy<T, typename get_enumerator_adapter_type<T, U>::type>
+        {
+            return enumerator_adapter_proxy<T, typename get_enumerator_adapter_type<T, U>::type>
+                (make_enumerator_adapter<T>(std::forward<U>(param)));
         }
 
-        //
-        //  Workaround for a limitation in Visual C++ to do
-        //      declspec(foo())::value_type
-        //
-        template <typename T>
-        inline auto get_enumerator_value_type(const T& adapter) -> typename T::value_type
+/*        
+        template <typename T, typename U>
+        inline auto make_enumerator_adapter_proxy(U&& param) 
+            -> enumerator_adapter_proxy<T, decltype(make_enumerator_adapter<T>(std::forward<U>(param)))>
         {
+            return enumerator_adapter_proxy<T, decltype(make_enumerator_adapter<T>(std::forward<U>(param)))>(make_enumerator_adapter<T>(std::forward<U>(param)));
         }
+*/       
 
         //
         //  Enumerator adapter based on a range specified by a pair of STL-compatible
@@ -146,7 +161,8 @@ namespace polymorphic_collections
             {
                 if (m_begin != m_end)
                 {
-                    return *m_begin++;
+                    T cur = m_begin++;
+                    return *cur;
                 }
                 else
                 {
@@ -157,6 +173,35 @@ namespace polymorphic_collections
         private:
             T m_begin, m_end;
         };
+
+        template <typename T, typename C>
+        struct supports_iterator_enumerator_adapter
+        {
+            static const bool value = has_iterator<C>::value;
+        };
+
+        template <typename T, typename C>
+        inline auto make_enumerator_adapter(C& collection)
+            -> typename boost::enable_if<supports_iterator_enumerator_adapter<T, C>,
+                                         iterator_enumerator_adapter<typename C::iterator>>::type
+        {
+            return iterator_enumerator_adapter<typename C::iterator>(std::begin(collection), std::end(collection));
+        }
+
+        template <typename T, typename C>
+        inline auto make_enumerator_adapter(const C& collection)
+            -> typename boost::enable_if<supports_iterator_enumerator_adapter<T, C>,
+                                         iterator_enumerator_adapter<typename C::const_iterator>>::type
+        {
+            return iterator_enumerator_adapter<typename C::const_iterator>(collection.cbegin(), collection.cend());
+        }
+
+        template <typename T, size_t N>
+        inline auto make_enumerator_adapter(T (&ar)[N])
+            -> iterator_enumerator_adapter<T*>
+        {
+            return iterator_enumerator_adapter<T*>(std::begin(ar), std::end(ar));
+        }
 
         //
         //  Enumerator adapter which embeds an STL-compatible collection in the enumerator.
@@ -229,6 +274,21 @@ namespace polymorphic_collections
             iterator_type m_begin, m_end;
         };
 
+        template <typename T, typename C>
+        struct supports_embedded_enumerator_adapter
+        {
+            static const bool value = has_iterator<C>::value;
+        };
+        
+        template <typename T, typename C>
+        inline auto make_enumerator_adapter(C&& collection, typename C::iterator* dummy = nullptr)
+            -> typename boost::enable_if<supports_embedded_enumerator_adapter<T, typename boost::remove_reference<C>::type>,
+                                         embedded_enumerator_adapter<typename boost::remove_reference<C>::type>>::type
+        {
+            // FIXME: the dummy parameter should not be necessary but Visual C++ chokes if it isn't present.
+            return embedded_enumerator_adapter<typename boost::remove_reference<C>::type>(std::forward<C>(collection));
+        }
+        
         //
         //  Enumerator adapter which encapsulates a functor.
         //
@@ -244,19 +304,15 @@ namespace polymorphic_collections
         //  Parameters:
         //      [template] F
         //          Functor type.
-        //      [template] T
-        //          Return value of the functor; this is not deducible automatically,
-        //          however specialization of make_enumerator_adapter for callable
-        //          objects can deduce it via decltype.
         //
-        template <typename F, typename T>
+        template <typename F>
         class functional_enumerator_adapter
         {
         public:
-            typedef functional_enumerator_adapter<F, T> this_type;
+            typedef functional_enumerator_adapter<F> this_type;
             typedef F function_type;
-            typedef T return_type;
-            typedef typename boost::remove_reference<T>::type value_type;
+            typedef typename is_callable<F>::return_type::value_type return_type;
+            typedef typename boost::remove_reference<return_type>::type value_type;
 
             functional_enumerator_adapter(const function_type& func)
             : m_func(func)
@@ -285,102 +341,18 @@ namespace polymorphic_collections
             boost::optional<return_type> m_value;
         };
 
-        //  Workaround for a limitation in Visual C++ making it impossible to do this:
-        //      decltype(func())::value_type
-        template <typename T>
-        auto get_optional_internal_type(boost::optional<T>& t) -> T
-        {
-        }
-
-        template <typename T>
-        auto get_optional_internal_type(boost::optional<T&>& t) -> T&
-        {
-        }
-
-        //
-        //  Tests if a type is suitable for encapsulation in an iterator_enumerator_adapter.
-        //
-        template <typename T>
-        struct supports_iterator_enumerator_adapter
-        {
-            static const bool value = has_iterator<T>::value;
-        };
-
-        //
-        //  Tests if a type is suitable for encapsulation in a embedded_enumerator_adapter.
-        //
-        template <typename T>
-        struct supports_embedded_enumerator_adapter
-        {
-            static const bool value = has_iterator<T>::value;
-        };
-
-        //
-        //  Tests if a type is suitable for encapsulation in a functional_enumerator_adapter.
-        //
-        template <typename T>
+        template <typename T, typename F>
         struct supports_functional_enumerator_adapter
         {
-            static const bool value = is_callable<T>::value;
-            typedef typename is_callable<T>::return_type return_type;
+            static const bool value = is_callable<F>::value;
         };
 
-        //
-        //  Makes an iterator_enumerator_adapter out of an STL-compatible collection.
-        //
-        //  It would be nice to be able to do this:
-        //      auto make_enumerator_adapter(T& t) -> iterator_enumerator_adapter<decltype(std::begin(t))>
-        //
-        //  Unfortunately that requires the generic implementation of std::begin() to be defined as:
-        //      auto std::begin(T& t) -> decltype(t.begin())
-        //
-        //  Otherwise, even types that don't have a begin() method or std::begin() specialization
-        //  will be matched, breaking the other make_enumerator_adapter specializations.
-        //
-        //  So for now we have specializations that explicitly refer to T::iterator (to match STL collections)
-        //  and specializations explicitly for arrays.
-        //
-        template <typename T>
-        inline typename boost::enable_if<supports_iterator_enumerator_adapter<T>, iterator_enumerator_adapter<typename T::iterator>>::type
-            make_enumerator_adapter(T& collection)
+        template <typename T, typename F>
+        inline auto make_enumerator_adapter(F&& func)
+            -> typename boost::enable_if<supports_functional_enumerator_adapter<T, typename boost::remove_reference<F>::type>,
+                                         functional_enumerator_adapter<typename boost::remove_reference<F>::type>>::type
         {
-            return iterator_enumerator_adapter<typename T::iterator>(collection.begin(), collection.end());
-        }
-
-        template <typename T>
-        inline typename boost::enable_if<supports_iterator_enumerator_adapter<T>, iterator_enumerator_adapter<typename T::const_iterator>>::type
-            make_enumerator_adapter(const T& collection)
-        {
-            return iterator_enumerator_adapter<typename T::const_iterator>(collection.cbegin(), collection.cend());
-        }
-
-        template <typename T, size_t N>
-        inline iterator_enumerator_adapter<T*> make_enumerator_adapter(T (&ar)[N])
-        {
-            return iterator_enumerator_adapter<T*>(std::begin(ar), std::end(ar));
-        }
-
-        template <typename T>
-        inline iterator_enumerator_adapter<T*> make_enumerator_adapter(T* begin, T* end)
-        {
-            return iterator_enumerator_adapter<T*>(begin, end);
-        }
-
-        template <typename T>
-        inline typename boost::enable_if<supports_embedded_enumerator_adapter<T>, embedded_enumerator_adapter<T>>::type 
-            make_enumerator_adapter(T&& collection)
-        {
-            return embedded_enumerator_adapter<T>(std::move(collection));
-        }
-
-        template <typename T>
-        inline auto make_enumerator_adapter(T&& func, 
-            decltype(func())* dummy = nullptr) -> 
-            functional_enumerator_adapter<T, decltype(detail::get_optional_internal_type(func()))>
-        {
-            //  The dummy parameter prevents this from being instantiated for non-callable types.
-            //  Haven't been able to get enable_if<is_callable> to work.
-            return functional_enumerator_adapter<T, decltype(detail::get_optional_internal_type(func()))>(std::forward<T>(func));
+            return functional_enumerator_adapter<typename boost::remove_reference<F>::type>(std::forward<F>(func));
         }
     }
 }

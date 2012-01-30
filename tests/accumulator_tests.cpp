@@ -87,10 +87,10 @@ TEST(AccumulatorTests, AccumulatorCanEncapsulateFunctionPointer)
 TEST(AccumulatorTests, AccumulatorCanEncapsulateLambda)
 {
     int x = 0;
-    accumulator<int> a = make_accumulator<int>([&] (int y) -> void
+    accumulator<int> a = [&] (int y) -> void
     {
         ASSERT_EQ(y, x);
-    });
+    };
     a.add(++x);
     a.add(++x);
     a.add(++x);
@@ -117,11 +117,11 @@ TEST(AccumulatorTests, AccumulatorCanEncapsulateRangeSpecifiedByIterators)
 TEST(AccumulatorTests, AccumulatorCanEnforceSorting)
 {
     std::vector<int> v;
-    accumulator<int> a = make_accumulator<int>([&] (int x) -> void
+    accumulator<int> a = [&] (int x) -> void
     {
         v.push_back(x);
         std::sort(v.begin(), v.end());
-    });
+    };
     ASSERT_TRUE(std::is_sorted(v.begin(), v.end()));
     a.add(1);
     ASSERT_TRUE(std::is_sorted(v.begin(), v.end()));

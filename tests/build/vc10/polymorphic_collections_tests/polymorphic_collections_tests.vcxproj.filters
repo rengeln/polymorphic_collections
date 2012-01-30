@@ -50,6 +50,9 @@
     <ClInclude Include="..\..\..\..\polymorphic_collections\detail\accessor.hpp">
       <Filter>Header Files\polymorphic_collections\detail</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\..\polymorphic_collections\detail\aggregator.hpp">
+      <Filter>Header Files\polymorphic_collections\detail</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\enumerator_tests.cpp">
@@ -59,6 +62,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\accessor_tests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\aggregator_tests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

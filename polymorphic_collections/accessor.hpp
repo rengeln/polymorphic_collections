@@ -7,7 +7,6 @@
 #define POLYMORPHIC_COLLECTIONS_ACCESSOR_HPP
 
 #include "policy.hpp"
-#include "detail/common.hpp"
 #include "detail/accessor.hpp"
 
 namespace polymorphic_collections
@@ -119,7 +118,7 @@ namespace polymorphic_collections
         template <typename U>
         this_type& operator=(U&& param)
         {
-            *this = detail::make_accessor_adapter_proxy<T>(std::forward<U>(param));
+            *this = detail::make_accessor_adapter_proxy<K, T>(std::forward<U>(param));
             return *this;
         }
 
@@ -175,6 +174,7 @@ namespace polymorphic_collections
     //
     //  Makes an implicitly-typed accessor out of the source object.
     //
+    /*
     template <typename T>
     inline auto make_accessor(T&& param) -> accessor<decltype(detail::get_accessor_key_type(detail::make_accessor_adapter(std::forward<T>(param)))),
                                                      decltype(detail::get_accessor_value_type(detail::make_accessor_adapter(std::forward<T>(param))))>
@@ -183,6 +183,7 @@ namespace polymorphic_collections
         typedef decltype(detail::get_accessor_value_type(detail::make_accessor_adapter(std::forward<T>(param)))) value_type;
         return accessor<key_type, value_type>(detail::make_accessor_adapter_proxy<key_type, value_type>(std::forward<T>(param)));
     }
+    */
 }
 
 #endif  // POLYMORPHIC_COLLECTIONS_ACCESSOR_HPP
