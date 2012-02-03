@@ -238,7 +238,7 @@ TEST(EnumeratorTests, EnumeratorOfAbstractBaseTypeCanEncapsulateCollectionOfDeri
 {
     struct Foo
     {
-        virtual ~Foo() = 0 { }
+        virtual ~Foo() { }
         virtual int value() = 0;
     };
 

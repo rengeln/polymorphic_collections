@@ -32,6 +32,7 @@ namespace polymorphic_collections
         typedef K key_type;
         typedef T value_type;
         typedef accessor<K, T, P1> this_type;
+        typedef P1 lock_policy;
 
         //  Size, in bytes, of the internal storage buffer used to store the
         //  type-erased adapter object, thereby avoiding a heap allocation.
@@ -130,11 +131,19 @@ namespace polymorphic_collections
             }
             else
             {
-                if (lock())
+                if (lock_policy::lock())
                 {
-                    boost::optional<T&> value = m_adapter->get(key);
-                    unlock();
-                    return value;
+                    try
+                    {
+                        boost::optional<T&> value = m_adapter->get(key);
+                        lock_policy::unlock();
+                        return value;
+                    }
+                    catch (...)
+                    {
+                        lock_policy::unlock();
+                        throw;
+                    }
                 }
                 else
                 {

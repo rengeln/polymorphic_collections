@@ -37,6 +37,7 @@ namespace polymorphic_collections
     public:
         typedef T value_type;
         typedef enumerator<T, P1> this_type;
+        typedef P1 lock_policy;
 
         //  Size, in bytes, of the internal storage buffer used to store the
         //  type-erased adapter object, thereby avoiding a heap allocation.
@@ -138,11 +139,19 @@ namespace polymorphic_collections
             }
             else
             {
-                if (lock())
+                if (lock_policy::lock())
                 {
-                    boost::optional<T&> value = m_adapter->next();
-                    unlock();
-                    return value;
+                    try
+                    {
+                        boost::optional<T&> value = m_adapter->next();
+                        lock_policy::unlock();
+                        return value;
+                    }
+                    catch (...)
+                    {
+                        lock_policy::unlock();
+                        throw;
+                    }
                 }
                 else
                 {
@@ -161,7 +170,7 @@ namespace polymorphic_collections
             {
                 if (reinterpret_cast<char*>(m_adapter) == m_storage)
                 {
-                    m_adapter->~enumerator_adapter_interface<T>();
+                    m_adapter->~enumerator_adapter_interface();
                 }
                 else
                 {

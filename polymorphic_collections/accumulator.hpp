@@ -32,6 +32,7 @@ namespace polymorphic_collections
     public:
         typedef T value_type;
         typedef accumulator<T, P1> this_type;
+        typedef P1 lock_policy;
 
         //  Size, in bytes, of the internal storage buffer used to store the
         //  type-erased adapter object, thereby avoiding a heap allocation.
@@ -126,29 +127,45 @@ namespace polymorphic_collections
 
         accumulator<T>& add(const T& value)
         {
-            if (lock())
+            if (lock_policy::lock())
             {
-                if (!m_adapter)
+                try
                 {
-                    throw std::overflow_error("accumulator::add()");
+                    if (!m_adapter)
+                    {
+                        throw std::overflow_error("accumulator::add()");
+                    }
+                    T new_value = value;
+                    m_adapter->add(std::move(new_value));
+                    lock_policy::unlock();
                 }
-                T new_value = value;
-                m_adapter->add(std::move(new_value));
-                unlock();
+                catch (...)
+                {
+                    lock_policy::unlock();
+                    throw;
+                }
             }
             return *this;
         }
         
         accumulator<T>& add(T&& value)
         {
-            if (lock())
+            if (lock_policy::lock())
             {
-                if (!m_adapter)
+                try
                 {
-                    throw std::overflow_error("accumulator::add()");
+                    if (!m_adapter)
+                    {
+                        throw std::overflow_error("accumulator::add()");
+                    }
+                    m_adapter->add(std::move(value));
+                    lock_policy::unlock();
                 }
-                m_adapter->add(std::move(value));
-                unlock();
+                catch (...)
+                {
+                    lock_policy::unlock();
+                    throw;
+                }
             }
             return *this;
         }
@@ -170,7 +187,7 @@ namespace polymorphic_collections
             {
                 if (reinterpret_cast<char*>(m_adapter) == m_storage)
                 {
-                    m_adapter->~accumulator_adapter_interface<T>();
+                    m_adapter->~accumulator_adapter_interface();
                 }
                 else
                 {

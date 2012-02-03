@@ -26,10 +26,15 @@ namespace polymorphic_collections
             typedef T value_type;
             typedef accumulator_adapter_interface<T> this_type;
 
-            virtual ~accumulator_adapter_interface() = 0 { }
+            virtual ~accumulator_adapter_interface() = 0;
             virtual void add(value_type&&) = 0;
             virtual this_type* move(void*) = 0;
         };
+        
+        template <typename T>
+        inline accumulator_adapter_interface<T>::~accumulator_adapter_interface()
+        {
+        }
 
         //
         //  Proxy class which holds the actual adapter.
@@ -70,33 +75,6 @@ namespace polymorphic_collections
         private:
             adapter_type m_adapter;
         };
-
-        //  FIXME: Visual C++ has issues with decltype resolving to int if template
-        //  substitution fails instead of giving an error message; typically this
-        //  results in errors much deeper in the template code, which are extremely
-        //  unclear. This workaround, while hacky, makes error messages MUCH cleaner.
-        //  See the commented out code below for the original version.
-        template <typename T, typename U>
-        struct get_accumulator_adapter_type
-        {
-            typedef decltype(make_accumulator_adapter<T>(declval<U>())) type;
-        };
-
-        template <typename T, typename U>
-        inline auto make_accumulator_adapter_proxy(U&& param) 
-            -> accumulator_adapter_proxy<T, typename get_accumulator_adapter_type<T, U>::type>
-        {
-            return accumulator_adapter_proxy<T, typename get_accumulator_adapter_type<T, U>::type>
-                (make_accumulator_adapter<T>(std::forward<U>(param)));
-        }
-
-        /*
-        template <typename T, typename U>
-        inline auto make_accumulator_adapter_proxy(U&& param) -> accumulator_adapter_proxy<T, decltype(make_accumulator_adapter<T>(std::forward<U>(param)))>
-        {
-            return accumulator_adapter_proxy<T, decltype(make_accumulator_adapter<T>(std::forward<U>(param)))>(make_accumulator_adapter<T>(std::forward<U>(param)));
-        }
-        */
 
         //
         //  Accumulator adapter encapsulating a collection implementing a push_back method.
@@ -150,7 +128,7 @@ namespace polymorphic_collections
         public:
             typedef I iterator_type;
             typedef typename std::iterator_traits<iterator_type>::value_type value_type;
-            typedef typename iterator_accumulator_adapter<iterator_type> this_type;
+            typedef iterator_accumulator_adapter<iterator_type> this_type;
 
             iterator_accumulator_adapter(const iterator_type& begin, const iterator_type& end)
             : m_begin(begin), m_end(end)
@@ -245,6 +223,33 @@ namespace polymorphic_collections
         {
             return functional_accumulator_adapter<T, typename boost::remove_reference<F>::type>(std::forward<F>(func));
         }
+
+        //  FIXME: Visual C++ has issues with decltype resolving to int if template
+        //  substitution fails instead of giving an error message; typically this
+        //  results in errors much deeper in the template code, which are extremely
+        //  unclear. This workaround, while hacky, makes error messages MUCH cleaner.
+        //  See the commented out code below for the original version.
+        template <typename T, typename U>
+        struct get_accumulator_adapter_type
+        {
+            typedef decltype(make_accumulator_adapter<T>(declval<U>())) type;
+        };
+
+        template <typename T, typename U>
+        inline auto make_accumulator_adapter_proxy(U&& param) 
+            -> accumulator_adapter_proxy<T, typename get_accumulator_adapter_type<T, U>::type>
+        {
+            return accumulator_adapter_proxy<T, typename get_accumulator_adapter_type<T, U>::type>
+                (make_accumulator_adapter<T>(std::forward<U>(param)));
+        }
+
+        /*
+        template <typename T, typename U>
+        inline auto make_accumulator_adapter_proxy(U&& param) -> accumulator_adapter_proxy<T, decltype(make_accumulator_adapter<T>(std::forward<U>(param)))>
+        {
+            return accumulator_adapter_proxy<T, decltype(make_accumulator_adapter<T>(std::forward<U>(param)))>(make_accumulator_adapter<T>(std::forward<U>(param)));
+        }
+        */
     }
 }
 

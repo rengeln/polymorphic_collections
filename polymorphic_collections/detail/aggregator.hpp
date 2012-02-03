@@ -29,10 +29,15 @@ namespace polymorphic_collections
             typedef T value_type;
             typedef aggregator_adapter_interface<K, T> this_type;
 
-            virtual ~aggregator_adapter_interface() = 0 { }
+            virtual ~aggregator_adapter_interface() = 0;
             virtual void add(key_type&&, value_type&&) = 0;
             virtual this_type* move(void* ptr) = 0;
         };
+        
+        template <typename K, typename T>
+        inline aggregator_adapter_interface<K, T>::~aggregator_adapter_interface()
+        {
+        }
 
         //
         //  Proxy class which holds the actual adapter.
@@ -74,35 +79,6 @@ namespace polymorphic_collections
         private:
             adapter_type m_adapter;
         };
-
-        //  FIXME: Visual C++ has issues with decltype resolving to int if template
-        //  substitution fails instead of giving an error message; typically this
-        //  results in errors much deeper in the template code, which are extremely
-        //  unclear. This workaround, while hacky, makes error messages MUCH cleaner.
-        //  See the commented out code below for the original version.
-        template <typename K, typename T, typename U>
-        struct get_aggregator_adapter_type
-        {
-            typedef decltype(make_aggregator_adapter<K, T>(declval<U>())) type;
-        };
-
-        template <typename K, typename T, typename U>
-        inline auto make_aggregator_adapter_proxy(U&& param) 
-            -> aggregator_adapter_proxy<K, T, typename get_aggregator_adapter_type<K, T, U>::type>
-        {
-            return aggregator_adapter_proxy<K, T, typename get_aggregator_adapter_type<K, T, U>::type>
-                (make_aggregator_adapter<K, T>(std::forward<U>(param)));
-        }
-
-        /*
-        template <typename K, typename T, typename U>
-        inline auto make_aggregator_adapter_proxy(U&& param)
-            -> aggregator_adapter_proxy<K, T, decltype(make_aggregator_adapter<K, T>(std::forward<U>(param)))>
-        {
-            return aggregator_adapter_proxy<K, T, decltype(make_aggregator_adapter<K, T>(std::forward<U>(param)))>(
-                make_aggregator_adapter<K, T>(std::forward<U>(param)));
-        }
-        */
 
         //
         //  Aggregator adapter encapsulating a collection implementing an insert() method.
@@ -209,6 +185,35 @@ namespace polymorphic_collections
         {
             return functional_aggregator_adapter<K, T, typename boost::remove_reference<F>::type>(std::forward<F>(func));
         }
+        
+        //  FIXME: Visual C++ has issues with decltype resolving to int if template
+        //  substitution fails instead of giving an error message; typically this
+        //  results in errors much deeper in the template code, which are extremely
+        //  unclear. This workaround, while hacky, makes error messages MUCH cleaner.
+        //  See the commented out code below for the original version.
+        template <typename K, typename T, typename U>
+        struct get_aggregator_adapter_type
+        {
+            typedef decltype(make_aggregator_adapter<K, T>(declval<U>())) type;
+        };
+
+        template <typename K, typename T, typename U>
+        inline auto make_aggregator_adapter_proxy(U&& param) 
+            -> aggregator_adapter_proxy<K, T, typename get_aggregator_adapter_type<K, T, U>::type>
+        {
+            return aggregator_adapter_proxy<K, T, typename get_aggregator_adapter_type<K, T, U>::type>
+                (make_aggregator_adapter<K, T>(std::forward<U>(param)));
+        }
+
+        /*
+        template <typename K, typename T, typename U>
+        inline auto make_aggregator_adapter_proxy(U&& param)
+            -> aggregator_adapter_proxy<K, T, decltype(make_aggregator_adapter<K, T>(std::forward<U>(param)))>
+        {
+            return aggregator_adapter_proxy<K, T, decltype(make_aggregator_adapter<K, T>(std::forward<U>(param)))>(
+                make_aggregator_adapter<K, T>(std::forward<U>(param)));
+        }
+        */        
     }
 }
 

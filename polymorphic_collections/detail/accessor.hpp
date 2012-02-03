@@ -28,10 +28,15 @@ namespace polymorphic_collections
             typedef T value_type;
             typedef accessor_adapter_interface<K, T> this_type;
 
-            virtual ~accessor_adapter_interface() = 0 { }
+            virtual ~accessor_adapter_interface() = 0;
             virtual this_type* move(void* ptr) = 0;
             virtual boost::optional<T&> get(const K& key) = 0;
         };
+        
+        template <typename K, typename T>
+        inline accessor_adapter_interface<K, T>::~accessor_adapter_interface()
+        {
+        }
 
         //
         //  Proxy class which holds the actual adapter and exposes the interface
@@ -70,7 +75,7 @@ namespace polymorphic_collections
 
             virtual boost::optional<value_type&> get(const key_type& key)
             {
-                auto& value = m_adapter.get(key);
+                auto value = m_adapter.get(key);
                 if (value)
                 {
                     return boost::optional<value_type&>(*value);
@@ -89,34 +94,6 @@ namespace polymorphic_collections
         private:
             adapter_type m_adapter;
         };
-
-        //  FIXME: Visual C++ has issues with decltype resolving to int if template
-        //  substitution fails instead of giving an error message; typically this
-        //  results in errors much deeper in the template code, which are extremely
-        //  unclear. This workaround, while hacky, makes error messages MUCH cleaner.
-        //  See the commented out code below for the original version.
-        template <typename K, typename T, typename U>
-        struct get_accessor_adapter_type
-        {
-            typedef decltype(make_accessor_adapter<K, T>(declval<U>())) type;
-        };
-
-        template <typename K, typename T, typename U>
-        inline auto make_accessor_adapter_proxy(U&& param) 
-            -> accessor_adapter_proxy<K, T, typename get_accessor_adapter_type<K, T, U>::type>
-        {
-            return accessor_adapter_proxy<K, T, typename get_accessor_adapter_type<K, T, U>::type>
-                (make_accessor_adapter<K, T>(std::forward<U>(param)));
-        }
-        
-        /*
-        template <typename K, typename T, typename U>
-        inline auto make_accessor_adapter_proxy(U&& param) -> accessor_adapter_proxy<K, T, decltype(make_accessor_adapter<K, T>(std::forward<U>(param)))>
-        {
-            return accessor_adapter_proxy<K, T, decltype(make_accessor_adapter<K, T>(std::forward<U>(param)))>(make_accessor_adapter<K, T>(std::forward<U>(param)));
-        }
-        */
-        
 
         //
         //  Accessor adapter for types which support a find() method.
@@ -137,7 +114,7 @@ namespace polymorphic_collections
             }
 
             find_accessor_adapter(this_type&& rhs)
-            : m_collection(std::move(rhs.m_collection))
+            : m_collection(rhs.m_collection)
             {
             }
 
@@ -257,10 +234,17 @@ namespace polymorphic_collections
             {
             }
             
-            boost::optional<return_type>& get(const key_type& key)
+            boost::optional<value_type&> get(const key_type& key)
             {
                 m_value = m_func(key);
-                return m_value;
+                if (m_value)
+                {
+                    return *m_value;
+                }
+                else
+                {
+                    return boost::none;
+                }
             }
 
         private:
@@ -281,6 +265,33 @@ namespace polymorphic_collections
         {
             return functional_accessor_adapter<typename boost::remove_reference<F>::type, K>(std::forward<F>(func));
         }
+        
+        //  FIXME: Visual C++ has issues with decltype resolving to int if template
+        //  substitution fails instead of giving an error message; typically this
+        //  results in errors much deeper in the template code, which are extremely
+        //  unclear. This workaround, while hacky, makes error messages MUCH cleaner.
+        //  See the commented out code below for the original version.
+        template <typename K, typename T, typename U>
+        struct get_accessor_adapter_type
+        {
+            typedef decltype(make_accessor_adapter<K, T>(declval<U>())) type;
+        };
+
+        template <typename K, typename T, typename U>
+        inline auto make_accessor_adapter_proxy(U&& param) 
+            -> accessor_adapter_proxy<K, T, typename get_accessor_adapter_type<K, T, U>::type>
+        {
+            return accessor_adapter_proxy<K, T, typename get_accessor_adapter_type<K, T, U>::type>
+                (make_accessor_adapter<K, T>(std::forward<U>(param)));
+        }
+        
+        /*
+        template <typename K, typename T, typename U>
+        inline auto make_accessor_adapter_proxy(U&& param) -> accessor_adapter_proxy<K, T, decltype(make_accessor_adapter<K, T>(std::forward<U>(param)))>
+        {
+            return accessor_adapter_proxy<K, T, decltype(make_accessor_adapter<K, T>(std::forward<U>(param)))>(make_accessor_adapter<K, T>(std::forward<U>(param)));
+        }
+        */        
     }
 }
 

@@ -25,10 +25,15 @@ namespace polymorphic_collections
             typedef T value_type;
             typedef enumerator_adapter_interface<T> this_type;
 
-            virtual ~enumerator_adapter_interface() = 0 { }
+            virtual ~enumerator_adapter_interface() = 0;
             virtual this_type* move(void* ptr) = 0;
             virtual boost::optional<T&> next() = 0;
         };
+        
+        template <typename T>
+        inline enumerator_adapter_interface<T>::~enumerator_adapter_interface()
+        {
+        }
 
         //
         //  Proxy class which holds the actual adapter and exposes an interface
@@ -73,11 +78,10 @@ namespace polymorphic_collections
 
             virtual boost::optional<value_type&> next()
             {
-                auto& value = m_adapter.next();
+                auto value = m_adapter.next();
                 if (value)
                 {
-                    value_type& ref = *value;
-                    return boost::optional<value_type&>(ref);
+                    return *value;
                 }
                 else
                 {
@@ -93,34 +97,6 @@ namespace polymorphic_collections
         private:
             A m_adapter;
         };
-
-        //  FIXME: Visual C++ has issues with decltype resolving to int if template
-        //  substitution fails instead of giving an error message; typically this
-        //  results in errors much deeper in the template code, which are extremely
-        //  unclear. This workaround, while hacky, makes error messages MUCH cleaner.
-        //  See the commented out code below for the original version.
-        template <typename T, typename U>
-        struct get_enumerator_adapter_type
-        {
-            typedef decltype(make_enumerator_adapter<T>(declval<U>())) type;
-        };
-
-        template <typename T, typename U>
-        inline auto make_enumerator_adapter_proxy(U&& param) 
-            -> enumerator_adapter_proxy<T, typename get_enumerator_adapter_type<T, U>::type>
-        {
-            return enumerator_adapter_proxy<T, typename get_enumerator_adapter_type<T, U>::type>
-                (make_enumerator_adapter<T>(std::forward<U>(param)));
-        }
-
-/*        
-        template <typename T, typename U>
-        inline auto make_enumerator_adapter_proxy(U&& param) 
-            -> enumerator_adapter_proxy<T, decltype(make_enumerator_adapter<T>(std::forward<U>(param)))>
-        {
-            return enumerator_adapter_proxy<T, decltype(make_enumerator_adapter<T>(std::forward<U>(param)))>(make_enumerator_adapter<T>(std::forward<U>(param)));
-        }
-*/       
 
         //
         //  Enumerator adapter based on a range specified by a pair of STL-compatible
@@ -330,10 +306,17 @@ namespace polymorphic_collections
                 return *this;
             }
 
-            boost::optional<return_type>& next()
+            boost::optional<value_type&> next()
             {
                 m_value = m_func();
-                return m_value;
+                if (m_value)
+                {
+                    return *m_value;
+                }
+                else
+                {
+                    return boost::none;
+                }
             }
 
         private:
@@ -354,6 +337,34 @@ namespace polymorphic_collections
         {
             return functional_enumerator_adapter<typename boost::remove_reference<F>::type>(std::forward<F>(func));
         }
+        
+        //  FIXME: Visual C++ has issues with decltype resolving to int if template
+        //  substitution fails instead of giving an error message; typically this
+        //  results in errors much deeper in the template code, which are extremely
+        //  unclear. This workaround, while hacky, makes error messages MUCH cleaner.
+        //  See the commented out code below for the original version.
+        template <typename T, typename U>
+        struct get_enumerator_adapter_type
+        {
+            typedef decltype(make_enumerator_adapter<T>(declval<U>())) type;
+        };
+
+        template <typename T, typename U>
+        inline auto make_enumerator_adapter_proxy(U&& param) 
+            -> enumerator_adapter_proxy<T, typename get_enumerator_adapter_type<T, U>::type>
+        {
+            return enumerator_adapter_proxy<T, typename get_enumerator_adapter_type<T, U>::type>
+                (make_enumerator_adapter<T>(std::forward<U>(param)));
+        }
+
+/*        
+        template <typename T, typename U>
+        inline auto make_enumerator_adapter_proxy(U&& param) 
+            -> enumerator_adapter_proxy<T, decltype(make_enumerator_adapter<T>(std::forward<U>(param)))>
+        {
+            return enumerator_adapter_proxy<T, decltype(make_enumerator_adapter<T>(std::forward<U>(param)))>(make_enumerator_adapter<T>(std::forward<U>(param)));
+        }
+*/               
     }
 }
 

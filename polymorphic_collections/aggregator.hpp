@@ -30,6 +30,7 @@ namespace polymorphic_collections
         typedef K key_type;
         typedef T value_type;
         typedef aggregator<K, T, P1> this_type;
+        typedef P1 lock_policy;
 
         //  Size, in bytes, of the internal storage buffer used to store the
         //  type-erased adapter object, thereby avoiding a heap allocation.
@@ -124,60 +125,92 @@ namespace polymorphic_collections
         
         aggregator<K, T>& add(const K& key, const T& value)
         {
-            if (lock())
+            if (lock_policy::lock())
             {
-                if (!m_adapter)
+                try
                 {
-                    throw std::overflow_error("aggregator::add()");
+                    if (!m_adapter)
+                    {
+                        throw std::overflow_error("aggregator::add()");
+                    }
+                    key_type new_key = key;
+                    value_type new_value = value;
+                    m_adapter->add(std::move(new_key), std::move(new_value));
                 }
-                key_type new_key = key;
-                value_type new_value = value;
-                m_adapter->add(std::move(new_key), std::move(new_value));
-                unlock();
+                catch (...)
+                {
+                    lock_policy::unlock();
+                    throw;
+                }
+                lock_policy::unlock();                
             }
             return *this;
         }
 
         aggregator<K, T>& add(const K&  key, T&& value)
         {
-            if (lock())
+            if (lock_policy::lock())
             {
-                if (!m_adapter)
+                try
                 {
-                    throw std::overflow_error("aggregator::add()");
+                    if (!m_adapter)
+                    {
+                        throw std::overflow_error("aggregator::add()");
+                    }
+                    key_type new_key = key;
+                    m_adapter->add(std::move(new_key), std::move(value));
                 }
-                key_type new_key = key;
-                m_adapter->add(std::move(new_key), std::move(value));
-                unlock();
+                catch (...)
+                {
+                    lock_policy::unlock();
+                    throw;
+                }
+                lock_policy::unlock();                
             }
             return *this;
         }
 
         aggregator<K, T>& add(K&& key, const T& value)
         {
-            if (lock())
+            if (lock_policy::lock())
             {
-                if (!m_adapter)
+                try
                 {
-                    throw std::overflow_error("aggregator::add()");
+                    if (!m_adapter)
+                    {
+                        throw std::overflow_error("aggregator::add()");
+                    }
+                    value_type new_value = value;
+                    m_adapter->add(std::move(key), std::move(new_value));
                 }
-                value_type new_value = value;
-                m_adapter->add(std::move(key), std::move(new_value));
-                unlock();
+                catch (...)
+                {
+                    lock_policy::unlock();
+                    throw;
+                }
+                lock_policy::unlock();                
             }
             return *this;
         }
 
         aggregator<K, T>& add(K&& key, T&& value)
         {
-            if (lock())
+            if (lock_policy::lock())
             {
-                if (!m_adapter)
+                try
                 {
-                    throw std::overflow_error("aggregator::add()");
+                    if (!m_adapter)
+                    {
+                        throw std::overflow_error("aggregator::add()");
+                    }
+                    m_adapter->add(std::move(key), std::move(value));
                 }
-                m_adapter->add(std::move(key), std::move(value));
-                unlock();
+                catch (...)
+                {
+                    lock_policy::unlock();
+                    throw;
+                }
+                lock_policy::unlock(); 
             }
             return *this;
         }
@@ -189,7 +222,7 @@ namespace polymorphic_collections
             {
                 if (reinterpret_cast<char*>(m_adapter) == m_storage)
                 {
-                    m_adapter->~aggregator_adapter_interface<K, T>();
+                    m_adapter->~aggregator_adapter_interface();
                 }
                 else
                 {
